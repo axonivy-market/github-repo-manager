@@ -31,7 +31,7 @@ import static com.axonivy.github.constant.Constants.*;
 
 public class MarketAppProjectScanner {
   private static final Logger LOG = new Logger();
-  private static final String MVN_CMD = "-f %s/pom.xml -Dmaven.test.skip=true -DaltDeploymentRepository=github::https://maven.pkg.github.com/%s deploy";
+  private static final String MVN_CMD = "-f %s/pom.xml deploy -Dmaven.test.skip=true -DaltDeploymentRepository=github::https://maven.pkg.github.com/%s";
   private static final String MAVEN_REPO_PATTERN = "https://maven.axonivy.com/%s/maven-metadata.xml";
   private static final String DEFAULT_BRANCH = "master";
   private final String ghActor;
@@ -78,6 +78,7 @@ public class MarketAppProjectScanner {
     }
     mavenCommand = mavenCommand.concat(goals).concat(" -B");
     // Use ProcessBuilder to execute the command
+    LOG.info("Executing Maven command {0}", mavenCommand);
     ProcessBuilder processBuilder = new ProcessBuilder(mavenCommand.split(" "));
     processBuilder.directory(projectDir); // Set the working directory
     processBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT); // Redirect output to console
@@ -147,6 +148,7 @@ public class MarketAppProjectScanner {
         List<String> proceedVersions = unifyVersionMustToRelease(versionList);
 //        cloneRepository(localDir, null);
         for (var version : proceedVersions) {
+          LOG.info("Start building the {0} project on {1} version", app, version);
           updatePOMVersion(localDir, app, version);
           // Step 4: Run Maven commands
           var manvenDeploy = MVN_CMD.formatted(app, repository.getFullName());
@@ -187,7 +189,7 @@ public class MarketAppProjectScanner {
     try (var input = new URL(path).openStream()) {
       return new String(input.readAllBytes());
     } catch (FileNotFoundException | MalformedURLException e) {
-      LOG.error("Cannot open URL {0} {1}", path, e.getMessage());
+      LOG.error("Cannot open URL {0}", path + e.getMessage());
     } catch (IOException e) {
       throw new RuntimeException(e);
     }

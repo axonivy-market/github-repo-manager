@@ -19,6 +19,7 @@ public class ScanAppProject {
       marketAppProjectScanner.proceed();
     } catch (Exception e) {
       LOG.error("Scan AppProject failed {0}", e.getMessage());
+      System.exit(1);
     }
   }
 }
