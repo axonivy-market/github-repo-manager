@@ -16,7 +16,8 @@ public class ScanAppProject {
     }
     try {
       var marketAppProjectScanner = new MarketAppProjectScanner(GitHubUtils.extractActor(args), ScanUtils.getProceedRepo());
-      marketAppProjectScanner.proceed();
+      int status = marketAppProjectScanner.proceed();
+      System.exit(status);
     } catch (Exception e) {
       LOG.error("Scan AppProject failed {0}", e.getMessage());
       System.exit(1);

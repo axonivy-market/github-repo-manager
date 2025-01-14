@@ -3,7 +3,7 @@ package com.axonivy.github.scan;
 import com.axonivy.github.DryRun;
 import com.axonivy.github.GitHubProvider;
 import com.axonivy.github.Logger;
-import com.axonivy.github.scan.enums.MavenArtifactProperty;
+import com.axonivy.github.scan.enums.MavenProperty;
 import com.axonivy.github.util.GitHubUtils;
 import com.axonivy.github.scan.util.MavenUtils;
 import com.axonivy.github.scan.util.MavenUtils.AppProject;
@@ -145,7 +145,7 @@ public class MarketMetaJsonScanner {
 
   private boolean modifyMetaJsonFile(File metaJsonFile) throws Exception {
     ObjectNode rootNode = (ObjectNode) objectMapper.readTree(metaJsonFile);
-    ArrayNode mavenArtifacts = (ArrayNode) rootNode.get(MavenArtifactProperty.ROOT.key);
+    ArrayNode mavenArtifacts = (ArrayNode) rootNode.get(MavenProperty.ROOT.key);
 
     // Skip the file if mavenArtifacts is empty
     if (mavenArtifacts == null || mavenArtifacts.isEmpty()) {
@@ -155,7 +155,7 @@ public class MarketMetaJsonScanner {
 
     boolean modified = false;
     // Check Maven dependencies
-    String productSource = rootNode.get(MavenArtifactProperty.SOURCE_URL.key).asText();
+    String productSource = rootNode.get(MavenProperty.SOURCE_URL.key).asText();
     Objects.requireNonNull(productSource);
     if (StringUtils.startsWith(productSource, GITHUB_URL)) {
       productSource = StringUtils.replace(productSource, GITHUB_URL, "");
@@ -169,10 +169,10 @@ public class MarketMetaJsonScanner {
 
     var isNeedAnAppZip = !mavenModels.pomModules().stream().filter(id -> !artifactIds.contains(id.getArtifactId())).toList().isEmpty();
     List<String> newModules = new ArrayList<>();
-    String productId = rootNode.get(MavenArtifactProperty.ID.key).asText();
-    String productName = rootNode.get(MavenArtifactProperty.NAME.key).asText();
+    String productId = rootNode.get(MavenProperty.ID.key).asText();
+    String productName = rootNode.get(MavenProperty.NAME.key).asText();
     if (isNeedAnAppZip && isMissingAppArtifact(productId, mavenArtifacts, APP_POSTFIX)) {
-      ObjectNode appArtifactNode = objectMapper.createObjectNode().put(MavenArtifactProperty.KEY.key, productId).put(MavenArtifactProperty.NAME.key, APP_NAME_PATTERN.formatted(productName)).put(MavenArtifactProperty.GROUP_ID.key, productGroupId).put(MavenArtifactProperty.ARTIFACT_ID.key, productId.concat(APP_POSTFIX)).put(MavenArtifactProperty.TYPE.key, MavenArtifactProperty.TYPE.defaultValue);
+      ObjectNode appArtifactNode = objectMapper.createObjectNode().put(MavenProperty.KEY.key, productId).put(MavenProperty.NAME.key, APP_NAME_PATTERN.formatted(productName)).put(MavenProperty.GROUP_ID.key, productGroupId).put(MavenProperty.ARTIFACT_ID.key, productId.concat(APP_POSTFIX)).put(MavenProperty.TYPE.key, MavenProperty.TYPE.defaultValue);
 
       mavenArtifacts.add(appArtifactNode);
       writeJSONToFile(metaJsonFile, rootNode);
@@ -183,7 +183,7 @@ public class MarketMetaJsonScanner {
       modified = true;
     }
     if (artifactIds.stream().anyMatch(id -> StringUtils.endsWithAny(id, "-demo", "-demos")) && isMissingAppArtifact(productId, mavenArtifacts, DEMO_APP_POSTFIX)) {
-      ObjectNode appArtifactNode = objectMapper.createObjectNode().put(MavenArtifactProperty.KEY.key, productId).put(MavenArtifactProperty.NAME.key, DEMO_APP_NAME_PATTERN.formatted(productName)).put(MavenArtifactProperty.GROUP_ID.key, productGroupId).put(MavenArtifactProperty.ARTIFACT_ID.key, productId.concat(DEMO_APP_POSTFIX)).put(MavenArtifactProperty.TYPE.key, MavenArtifactProperty.TYPE.defaultValue);
+      ObjectNode appArtifactNode = objectMapper.createObjectNode().put(MavenProperty.KEY.key, productId).put(MavenProperty.NAME.key, DEMO_APP_NAME_PATTERN.formatted(productName)).put(MavenProperty.GROUP_ID.key, productGroupId).put(MavenProperty.ARTIFACT_ID.key, productId.concat(DEMO_APP_POSTFIX)).put(MavenProperty.TYPE.key, MavenProperty.TYPE.defaultValue);
 
       mavenArtifacts.add(appArtifactNode);
       writeJSONToFile(metaJsonFile, rootNode);
@@ -222,8 +222,8 @@ public class MarketMetaJsonScanner {
   private boolean isMissingAppArtifact(String productId, ArrayNode mavenArtifacts, String postfix) {
     boolean missingNode = true;
     for (JsonNode artifact : mavenArtifacts) {
-      var key = artifact.get(MavenArtifactProperty.KEY.key);
-      var artifactId = artifact.get(MavenArtifactProperty.ARTIFACT_ID.key);
+      var key = artifact.get(MavenProperty.KEY.key);
+      var artifactId = artifact.get(MavenProperty.ARTIFACT_ID.key);
 
       if (key != null && key.asText().equals(productId) && artifactId != null && artifactId.asText().equals(productId.concat(postfix))) {
         missingNode = false;
