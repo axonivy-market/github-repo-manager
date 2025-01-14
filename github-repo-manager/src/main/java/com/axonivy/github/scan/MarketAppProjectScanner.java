@@ -206,19 +206,14 @@ public class MarketAppProjectScanner {
 
   private void cloneRepository(File directory, String tagName) {
     LOG.info("Cloning repository...");
-    try {
-      Git git = Git.cloneRepository().setURI(repository.getHtmlUrl().toString()).setDirectory(directory).setCredentialsProvider(GitHubProvider.createCredentialFor(ghActor)).setBranch(DEFAULT_BRANCH).call();
-      LOG.info("Repository cloned from {0} to: {1}", DEFAULT_BRANCH, directory.toPath());
-
+    try (Git git = Git.cloneRepository().setURI(repository.getHtmlUrl().toString()).setDirectory(directory).setCredentialsProvider(GitHubProvider.createCredentialFor(ghActor)).setBranch(DEFAULT_BRANCH).call()) {
       // Checkout the specific tag
       if (StringUtils.isNoneBlank(tagName)) {
         LOG.info("Checking out tag: {0}", tagName);
         git.checkout().setName(tagName).call();
         LOG.info("Checked out to tag: {0}", tagName);
       }
-      git.close();
-
-      LOG.info("Repository cloned to: " + directory.toPath());
+      LOG.info("Repository cloned from {0} into: {1} folder", DEFAULT_BRANCH, directory.toPath());
     } catch (Exception e) {
       LOG.error("Cannot clone repo {0}", e.getMessage());
     }
