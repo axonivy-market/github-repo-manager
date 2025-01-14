@@ -3,6 +3,7 @@ package com.axonivy.github.scan;
 import com.axonivy.github.DryRun;
 import com.axonivy.github.GitHubProvider;
 import com.axonivy.github.Logger;
+import com.axonivy.github.constant.Constants;
 import com.axonivy.github.scan.enums.MavenProperty;
 import com.axonivy.github.util.GitHubUtils;
 import com.axonivy.github.scan.util.MavenUtils;
@@ -37,7 +38,6 @@ import static com.axonivy.github.constant.Constants.*;
 public class MarketMetaJsonScanner {
   private static final Logger LOG = new Logger();
 
-  private static final String WORK_FOLDER = "work";
   private static final String MARKET_FOLDER_PATH = "market";
   private static final String META_JSON = "meta.json";
   private static final String BRANCH_NAME = "fix-missing-maven-artifacts";
@@ -60,8 +60,7 @@ public class MarketMetaJsonScanner {
   }
 
   private static void downloadFile(GHContent content, File targetFile) throws IOException {
-    URL url = new URL(content.getDownloadUrl());
-    try (InputStream inputStream = url.openStream()) {
+    try (InputStream inputStream = new URL(content.getDownloadUrl()).openStream()) {
       FileUtils.copyInputStreamToFile(inputStream, targetFile);
     }
     LOG.info("Downloaded: {0}", targetFile.getAbsolutePath());
@@ -121,7 +120,7 @@ public class MarketMetaJsonScanner {
       return;
     }
     // Download the meta.json file from the subfolder
-    File metaJsonFile = new File(WORK_FOLDER.concat("/").concat(content.getPath()));
+    File metaJsonFile = new File(Constants.WORK_DIR.concat(SLASH).concat(content.getPath()));
     downloadFile(content, metaJsonFile);
 
     boolean modified = modifyMetaJsonFile(metaJsonFile);
@@ -134,9 +133,16 @@ public class MarketMetaJsonScanner {
         // Create a new branch
         GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
         // Commit changes
-        GitHubUtils.commitNewFile(repository, BRANCH_NAME, content.getPath(), COMMIT_MESSAGE, FileUtils.readFileToString(metaJsonFile, StandardCharsets.UTF_8));
+        GitHubUtils.commitNewFile(repository,
+            BRANCH_NAME,
+            content.getPath(),
+            COMMIT_MESSAGE,
+            FileUtils.readFileToString(metaJsonFile, StandardCharsets.UTF_8));
         // Create a pull request
-        GitHubUtils.createPullRequest(ghActor, repository, BRANCH_NAME, "Fix: Add missing Maven artifact blocks", "This PR adds missing Maven artifact blocks to all `meta.json` files in the repository.");
+        GitHubUtils.createPullRequest(ghActor,
+            repository, BRANCH_NAME,
+            "Fix: Add missing Maven artifact blocks",
+            "This PR adds missing Maven artifact blocks to all `meta.json` files in the repository.");
       }
     } else {
       LOG.info("No changes were necessary.");
@@ -196,8 +202,16 @@ public class MarketMetaJsonScanner {
     mavenModels.pom().getModules().addAll(newModules);
 
     GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
-    GitHubUtils.commitNewFile(repository, BRANCH_NAME, "pom.xml", "Update POM module", MavenUtils.convertModelToString(mavenModels.pom()));
-    GitHubUtils.createPullRequest(ghActor, repository, BRANCH_NAME, "Fix: Add missing Maven artifact blocks", "This PR adds missing Maven artifact blocks to all `meta.json` files in the repository.");
+    GitHubUtils.commitNewFile(repository,
+        BRANCH_NAME,
+        POM,
+        "Update POM module",
+        MavenUtils.convertModelToString(mavenModels.pom()));
+    GitHubUtils.createPullRequest(ghActor,
+        repository,
+        BRANCH_NAME,
+        "Fix: Add missing Maven artifact blocks",
+        "This PR adds missing Maven artifact blocks to all `meta.json` files in the repository.");
     return modified;
   }
 
@@ -211,11 +225,11 @@ public class MarketMetaJsonScanner {
     GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
 
     // Create the project folder
-    String projectPath = productId + "-app" + "/";
+    String projectPath = productId + APP_POSTFIX + SLASH;
     AppProject appProject = MavenUtils.createAssemblyAppProject(productId, parentPom, mavenModels);
-    GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + "pom.xml", "Created new file", appProject.pom());
-    GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + "assembly.xml", "Created new file", appProject.assembly());
-    GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + "deploy.options.yaml", "Created new file", appProject.deployOptions());
+    GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + POM, "Created new file", appProject.pom());
+    GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + ASSEMBLY, "Created new file", appProject.assembly());
+    GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + DEPLOY_OPTIONS, "Created new file", appProject.deployOptions());
     LOG.info("Project created successfully inside the repository!");
   }
 
@@ -225,7 +239,8 @@ public class MarketMetaJsonScanner {
       var key = artifact.get(MavenProperty.KEY.key);
       var artifactId = artifact.get(MavenProperty.ARTIFACT_ID.key);
 
-      if (key != null && key.asText().equals(productId) && artifactId != null && artifactId.asText().equals(productId.concat(postfix))) {
+      if (key != null && key.asText().equals(productId)
+          && artifactId != null && artifactId.asText().equals(productId.concat(postfix))) {
         missingNode = false;
         break;
       }
