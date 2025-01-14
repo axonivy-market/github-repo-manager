@@ -1,0 +1,44 @@
+name: Scan App projects
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: 'Indicates whether to trigger changes to a product. By default, `dryRun` is set to `true`, meaning the action will perform a check without applying changes. When set to `false`, the action will both check for and add any missing files to the products.'
+        default: 'true'
+      repository:
+        description: 'Define repository to check the missing app project, example: axonivy-market/a-trust-connector'
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: temurin
+          cache: maven
+
+      - name: Set default values
+        run: |
+          echo "DRYRUN=${{ github.event.inputs.dryRun || 'true' }}" >> $GITHUB_ENV
+
+      - name: Build with Maven
+        working-directory: ./github-repo-manager
+        run: |
+          mvn -B clean compile exec:java \
+            -DDRY_RUN="${{ env.DRYRUN }}" \
+            -DGITHUB.TOKEN="${{ secrets.TOKEN }}" \
+            -Dexec.mainClass="com.axonivy.github.scan.ScanAppProject" \
+            -Dexec.args="${{ github.actor }}" \
+            -DGITHUB.WORKING.ORGANIZATIONS="${{ github.event.inputs.repository }}" \
+            -DGITHUB.MARKET.REPO
