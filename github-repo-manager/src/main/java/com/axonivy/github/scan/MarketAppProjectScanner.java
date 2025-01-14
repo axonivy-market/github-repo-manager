@@ -31,7 +31,7 @@ import static com.axonivy.github.constant.Constants.*;
 
 public class MarketAppProjectScanner {
   private static final Logger LOG = new Logger();
-  private static final String MVN_CMD = "-f %s/pom.xml deploy -Dmaven.test.skip=true -DaltDeploymentRepository=github::https://maven.pkg.github.com/%s";
+  private static final String MVN_CMD = "-f %s/pom.xml -Dmaven.test.skip=true -DaltDeploymentRepository=github::https://maven.pkg.github.com/%s";
   private static final String MAVEN_REPO_PATTERN = "https://maven.axonivy.com/%s/maven-metadata.xml";
   private static final String DEFAULT_BRANCH = "master";
   private final String ghActor;
@@ -76,7 +76,7 @@ public class MarketAppProjectScanner {
       LOG.info("Running on WIN OS");
       mavenCommand = "mvn.cmd ";
     }
-    mavenCommand = mavenCommand.concat(goals).concat(" -B");
+    mavenCommand = mavenCommand.concat("--batch-mode deploy ").concat(goals);
     // Use ProcessBuilder to execute the command
     LOG.info("Executing Maven command {0}", mavenCommand);
     ProcessBuilder processBuilder = new ProcessBuilder(mavenCommand.split(" "));
