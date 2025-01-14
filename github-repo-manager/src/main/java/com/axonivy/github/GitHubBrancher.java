@@ -4,6 +4,7 @@ import java.io.IOException;
 
 import org.apache.commons.lang3.StringUtils;
 import org.kohsuke.github.GHRepository;
+import static com.axonivy.github.constant.Constants.GIT_HEAD;
 
 public class GitHubBrancher {
 
@@ -74,7 +75,7 @@ public class GitHubBrancher {
         }
         System.out.println("Create branch " + branch + " on " + repo.getFullName() + " ~ " + branch + " ~ " + sha1);
         if (!dryRun) {
-          repo.createRef("refs/heads/" + branch, sha1);
+          repo.createRef(GIT_HEAD + branch, sha1);
         }
 
         if (dryRun) {
