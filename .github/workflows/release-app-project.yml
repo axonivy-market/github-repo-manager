@@ -19,6 +19,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Configure Git
+        run: |
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git config user.name "${{ github.actor }}"
+          git checkout -b new-release
+
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
@@ -31,6 +37,8 @@ jobs:
           echo "DRYRUN=${{ github.event.inputs.dryRun || 'true' }}" >> $GITHUB_ENV
 
       - name: Build with Maven
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
         working-directory: ./github-repo-manager
         run: |
           mvn -B clean compile exec:java \
