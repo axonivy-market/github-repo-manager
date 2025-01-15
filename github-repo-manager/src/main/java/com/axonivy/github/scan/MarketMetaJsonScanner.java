@@ -92,7 +92,7 @@ public class MarketMetaJsonScanner {
         proceedMetaFile(content);
       }
     }
-    return 0;
+    return anyChanges ? 1 : 0;
   }
 
   private void findMetaPath(GHContent ghContent) throws Exception {
@@ -130,24 +130,15 @@ public class MarketMetaJsonScanner {
     boolean modified = modifyMetaJsonFile(metaJsonFile);
     anyChanges = modified || anyChanges;
     if (anyChanges) {
-      if (DryRun.is()) {
-        LOG.info("DRY RUN: ");
-      } else {
-        GHRepository repository = gitHub.getRepository(marketRepo);
-        // Create a new branch
-        GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
-        // Commit changes
-        GitHubUtils.commitNewFile(repository,
-            BRANCH_NAME,
-            content.getPath(),
-            COMMIT_MESSAGE,
-            FileUtils.readFileToString(metaJsonFile, StandardCharsets.UTF_8));
-        // Create a pull request
-        GitHubUtils.createPullRequest(ghActor,
-            repository, BRANCH_NAME,
-            FIX_ADD_MISSING_MAVEN_ARTIFACT_TITLE,
-            FIX_ADD_MISSING_MAVEN_ARTIFACT_MESSAGE);
-      }
+      GHRepository repository = gitHub.getRepository(marketRepo);
+      // Create a new branch
+      GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
+      // Commit changes
+      GitHubUtils.commitNewFile(repository, BRANCH_NAME, content.getPath(), COMMIT_MESSAGE,
+          FileUtils.readFileToString(metaJsonFile, StandardCharsets.UTF_8));
+      // Create a pull request
+      GitHubUtils.createPullRequest(ghActor, repository, BRANCH_NAME, FIX_ADD_MISSING_MAVEN_ARTIFACT_TITLE,
+          FIX_ADD_MISSING_MAVEN_ARTIFACT_MESSAGE);
     } else {
       LOG.info("No changes were necessary.");
     }
@@ -223,7 +214,7 @@ public class MarketMetaJsonScanner {
     mavenArtifacts.add(appArtifactNode);
     writeJSONToFile(metaJsonFile, rootNode);
     // Create product-demo-app project
-    createAssemblyAppProject(productSource, productId + "-demo",
+    createAssemblyAppProject(productSource, productId + DEMO_POSTFIX,
         mavenModels.pom(), mavenModels.pomModules().stream().toList());
     return MavenUtils.resolveNewModuleName(mavenModels.pom(), DEMO_APP_POSTFIX, productId.concat(DEMO_APP_POSTFIX));
   }
@@ -245,7 +236,7 @@ public class MarketMetaJsonScanner {
     writeJSONToFile(metaJsonFile, rootNode);
     // Create product-app project
     createAssemblyAppProject(productSource, productId, mavenModels.pom(),
-        mavenModels.pomModules().stream().filter(model -> !StringUtils.endsWith(model.getArtifactId(), "-demo")).toList());
+        mavenModels.pomModules().stream().filter(model -> !StringUtils.endsWith(model.getArtifactId(), DEMO_POSTFIX)).toList());
     return MavenUtils.resolveNewModuleName(mavenModels.pom(), APP_POSTFIX, productId.concat(APP_POSTFIX));
   }
 
