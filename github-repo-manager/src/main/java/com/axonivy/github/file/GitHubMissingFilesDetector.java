@@ -2,6 +2,7 @@ package com.axonivy.github.file;
 
 import com.axonivy.github.DryRun;
 import com.axonivy.github.GitHubProvider;
+import com.axonivy.github.Logger;
 import com.axonivy.github.file.GitHubFiles.FileMeta;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.input.CharSequenceReader;
@@ -11,21 +12,22 @@ import java.io.IOException;
 import java.io.Reader;
 import java.util.List;
 import java.util.Objects;
+import static com.axonivy.github.constant.Constants.GIT_HEAD;
 
 public class GitHubMissingFilesDetector {
 
   private static final String GITHUB_ORG = ".github";
-  private static final String BRANCH_PREFIX = "refs/heads/";
   private static final Logger LOG = new Logger();
   private boolean isNotSync;
   private final FileReference reference;
   private final GitHub github;
   private final GHUser ghActor;
+  protected List<GHOrganization> organizations;
 
   public GitHubMissingFilesDetector(FileMeta fileMeta, String user) throws IOException {
     Objects.requireNonNull(fileMeta);
     this.reference = new FileReference(fileMeta);
-    this.github = GitHubProvider.getGithubToken();
+    this.github = GitHubProvider.getGithubByToken();
     this.ghActor = github.getUser(user);
   }
 
@@ -33,10 +35,11 @@ public class GitHubMissingFilesDetector {
     Objects.requireNonNull(orgNames);
     LOG.info("Working on organizations: {0}.", orgNames);
     for (var orgName : orgNames) {
-      var org = github.getOrganization(orgName);
-      for (var repo : List.copyOf(org.getRepositories().values())) {
+      var organization = github.getOrganization(orgName);
+      for (var repo : List.copyOf(organization.getRepositories().values())) {
         missingFile(repo);
       }
+      organizations.add(organization);
     }
     if (isNotSync) {
       LOG.error("At least one repository has no {0}.", reference.meta().filePath());
@@ -47,7 +50,7 @@ public class GitHubMissingFilesDetector {
     return 0;
   }
 
-  private void missingFile(GHRepository repo) throws IOException {
+  protected void missingFile(GHRepository repo) throws IOException {
     if (GITHUB_ORG.equals(repo.getName())) {
       return;
     }
@@ -114,7 +117,7 @@ public class GitHubMissingFilesDetector {
       return;
     }
     var defaultBranch = repo.getBranch(repo.getDefaultBranch());
-    String refURL = createBranchIfMissing(repo, BRANCH_PREFIX + reference.meta().branchName(), defaultBranch.getSHA1());
+    String refURL = createBranchIfMissing(repo, GIT_HEAD + reference.meta().branchName(), defaultBranch.getSHA1());
     try {
       repo.createContent()
           .branch(refURL)
@@ -196,7 +199,7 @@ public class GitHubMissingFilesDetector {
       return;
     }
     var headBranch = repo.getBranch(repo.getDefaultBranch());
-    String refURL = createBranchIfMissing(repo, BRANCH_PREFIX + reference.meta().branchName(), headBranch.getSHA1());
+    String refURL = createBranchIfMissing(repo, GIT_HEAD + reference.meta().branchName(), headBranch.getSHA1());
     repo.getFileContent(reference.meta().filePath(), refURL)
         .update(loadReferenceFileContent(repo.getUrl().toString()),
             reference.meta().commitMessage(),
