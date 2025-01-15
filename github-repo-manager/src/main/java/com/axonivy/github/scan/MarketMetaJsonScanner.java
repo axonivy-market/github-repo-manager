@@ -45,6 +45,10 @@ public class MarketMetaJsonScanner {
   private static final String APP_NAME_PATTERN = "%s App";
   private static final String DEMO_APP_NAME_PATTERN = "%s Demo App";
   private static final ObjectMapper objectMapper = new ObjectMapper();
+  public static final String UPDATE_POM_MODULE_MESSAGE = "Update POM module";
+  public static final String FIX_ADD_MISSING_MAVEN_ARTIFACT_TITLE = "Fix: Add missing Maven artifact blocks";
+  public static final String FIX_ADD_MISSING_MAVEN_ARTIFACT_MESSAGE = "This PR adds missing Maven artifact blocks to all `meta.json` files in the repository.";
+  public static final String CREATED_NEW_FILE_MESSAGE = "Created new file";
   private final GitHub gitHub;
   private final GHUser ghActor;
   private final String marketRepo;
@@ -141,8 +145,8 @@ public class MarketMetaJsonScanner {
         // Create a pull request
         GitHubUtils.createPullRequest(ghActor,
             repository, BRANCH_NAME,
-            "Fix: Add missing Maven artifact blocks",
-            "This PR adds missing Maven artifact blocks to all `meta.json` files in the repository.");
+            FIX_ADD_MISSING_MAVEN_ARTIFACT_TITLE,
+            FIX_ADD_MISSING_MAVEN_ARTIFACT_MESSAGE);
       }
     } else {
       LOG.info("No changes were necessary.");
@@ -152,7 +156,6 @@ public class MarketMetaJsonScanner {
   private boolean modifyMetaJsonFile(File metaJsonFile) throws Exception {
     ObjectNode rootNode = (ObjectNode) objectMapper.readTree(metaJsonFile);
     ArrayNode mavenArtifacts = (ArrayNode) rootNode.get(MavenProperty.ROOT.key);
-
     // Skip the file if mavenArtifacts is empty
     if (mavenArtifacts == null || mavenArtifacts.isEmpty()) {
       LOG.info("Skipping: mavenArtifacts is empty in " + metaJsonFile.getPath());
@@ -160,59 +163,90 @@ public class MarketMetaJsonScanner {
     }
 
     boolean modified = false;
-    // Check Maven dependencies
-    String productSource = rootNode.get(MavenProperty.SOURCE_URL.key).asText();
-    Objects.requireNonNull(productSource);
-    if (StringUtils.startsWith(productSource, GITHUB_URL)) {
-      productSource = StringUtils.replace(productSource, GITHUB_URL, "");
-    }
+    String productSource = extractProductSource(rootNode);
     GHRepository repository = gitHub.getRepository(productSource);
     MavenModel mavenModels = MavenUtils.findMavenModels(repository);
-    String productGroupId = Objects.requireNonNull(mavenModels).pom().getGroupId();
+    Objects.requireNonNull(mavenModels);
     List<String> artifactIds = new ArrayList<>();
     artifactIds.add(mavenModels.pom().getArtifactId());
     artifactIds.addAll(mavenModels.pomModules().stream().map(Model::getArtifactId).toList());
 
-    var isNeedAnAppZip = !mavenModels.pomModules().stream().filter(id -> !artifactIds.contains(id.getArtifactId())).toList().isEmpty();
-    List<String> newModules = new ArrayList<>();
+    String rootProductId = rootNode.get(MavenProperty.ID.key).asText();
+    if (isRequiredAppArtifact(mavenModels, artifactIds, rootProductId, mavenArtifacts)) {
+      String appModule = createNewAppArtifact(metaJsonFile, mavenArtifacts, rootNode, mavenModels);
+      mavenModels.pom().getModules().add(appModule);
+      modified = true;
+    }
+    if (isRequiredDemoAppArtifact(artifactIds, rootProductId, mavenArtifacts)) {
+      String demoAppModule = createNewDemoAppArtifact(metaJsonFile, mavenArtifacts, rootNode, mavenModels);
+      mavenModels.pom().getModules().add(demoAppModule);
+      modified = true;
+    }
+    GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
+    GitHubUtils.commitNewFile(repository, BRANCH_NAME, POM, UPDATE_POM_MODULE_MESSAGE, MavenUtils.convertModelToString(mavenModels.pom()));
+    GitHubUtils.createPullRequest(ghActor, repository, BRANCH_NAME, FIX_ADD_MISSING_MAVEN_ARTIFACT_TITLE, FIX_ADD_MISSING_MAVEN_ARTIFACT_MESSAGE);
+    return modified;
+  }
+
+  private boolean isRequiredDemoAppArtifact(List<String> artifactIds, String rootProductId, ArrayNode mavenArtifacts) {
+    return artifactIds.stream().anyMatch(id -> StringUtils.endsWithAny(id, DEMO_POSTFIX, DEMOS_POSTFIX))
+        && isMissingRequiredArtifact(rootProductId, mavenArtifacts, DEMO_APP_POSTFIX);
+  }
+
+  private boolean isRequiredAppArtifact(MavenModel mavenModels, List<String> artifactIds, String rootProductId, ArrayNode mavenArtifacts) {
+    return !mavenModels.pomModules().stream().filter(id -> !artifactIds.contains(id.getArtifactId())).toList().isEmpty()
+        && isMissingRequiredArtifact(rootProductId, mavenArtifacts, APP_POSTFIX);
+  }
+
+  private static String extractProductSource(ObjectNode rootNode) {
+    Objects.requireNonNull(rootNode);
+    String productSource = rootNode.get(MavenProperty.SOURCE_URL.key).asText();
+    if (StringUtils.startsWith(productSource, GITHUB_URL)) {
+      productSource = StringUtils.replace(productSource, GITHUB_URL, StringUtils.EMPTY);
+    }
+    return productSource;
+  }
+
+  private String createNewDemoAppArtifact(File metaJsonFile, ArrayNode mavenArtifacts, ObjectNode rootNode, MavenModel mavenModels)
+      throws Exception {
+    String productSource = extractProductSource(rootNode);
+    String productGroupId = Objects.requireNonNull(mavenModels).pom().getGroupId();
     String productId = rootNode.get(MavenProperty.ID.key).asText();
     String productName = rootNode.get(MavenProperty.NAME.key).asText();
-    if (isNeedAnAppZip && isMissingAppArtifact(productId, mavenArtifacts, APP_POSTFIX)) {
-      ObjectNode appArtifactNode = objectMapper.createObjectNode().put(MavenProperty.KEY.key, productId).put(MavenProperty.NAME.key, APP_NAME_PATTERN.formatted(productName)).put(MavenProperty.GROUP_ID.key, productGroupId).put(MavenProperty.ARTIFACT_ID.key, productId.concat(APP_POSTFIX)).put(MavenProperty.TYPE.key, MavenProperty.TYPE.defaultValue);
+    ObjectNode appArtifactNode = objectMapper.createObjectNode()
+        .put(MavenProperty.KEY.key, productId)
+        .put(MavenProperty.NAME.key, DEMO_APP_NAME_PATTERN.formatted(productName))
+        .put(MavenProperty.GROUP_ID.key, productGroupId)
+        .put(MavenProperty.ARTIFACT_ID.key, productId.concat(DEMO_APP_POSTFIX))
+        .put(MavenProperty.TYPE.key, MavenProperty.TYPE.defaultValue);
 
-      mavenArtifacts.add(appArtifactNode);
-      writeJSONToFile(metaJsonFile, rootNode);
-      // Create product-app project
-      createAssemblyAppProject(productSource, productId, mavenModels.pom(), mavenModels.pomModules().stream().filter(model -> !StringUtils.endsWith(model.getArtifactId(), "-demo")).toList());
-      String appModule = MavenUtils.resolveNewModuleName(mavenModels.pom(), APP_POSTFIX, productId.concat(APP_POSTFIX));
-      newModules.add(appModule);
-      modified = true;
-    }
-    if (artifactIds.stream().anyMatch(id -> StringUtils.endsWithAny(id, "-demo", "-demos")) && isMissingAppArtifact(productId, mavenArtifacts, DEMO_APP_POSTFIX)) {
-      ObjectNode appArtifactNode = objectMapper.createObjectNode().put(MavenProperty.KEY.key, productId).put(MavenProperty.NAME.key, DEMO_APP_NAME_PATTERN.formatted(productName)).put(MavenProperty.GROUP_ID.key, productGroupId).put(MavenProperty.ARTIFACT_ID.key, productId.concat(DEMO_APP_POSTFIX)).put(MavenProperty.TYPE.key, MavenProperty.TYPE.defaultValue);
+    mavenArtifacts.add(appArtifactNode);
+    writeJSONToFile(metaJsonFile, rootNode);
+    // Create product-demo-app project
+    createAssemblyAppProject(productSource, productId + "-demo",
+        mavenModels.pom(), mavenModels.pomModules().stream().toList());
+    return MavenUtils.resolveNewModuleName(mavenModels.pom(), DEMO_APP_POSTFIX, productId.concat(DEMO_APP_POSTFIX));
+  }
 
-      mavenArtifacts.add(appArtifactNode);
-      writeJSONToFile(metaJsonFile, rootNode);
-      // Create product-demo-app project
-      createAssemblyAppProject(productSource, productId + "-demo", mavenModels.pom(), mavenModels.pomModules().stream().toList());
-      String demoAppModule = MavenUtils.resolveNewModuleName(mavenModels.pom(), DEMO_APP_POSTFIX, productId.concat(DEMO_APP_POSTFIX));
-      newModules.add(demoAppModule);
-      modified = true;
-    }
-    mavenModels.pom().getModules().addAll(newModules);
+  private String createNewAppArtifact(File metaJsonFile, ArrayNode mavenArtifacts, ObjectNode rootNode, MavenModel mavenModels)
+      throws Exception {
+    String productSource = extractProductSource(rootNode);
+    String productGroupId = Objects.requireNonNull(mavenModels).pom().getGroupId();
+    String productId = rootNode.get(MavenProperty.ID.key).asText();
+    String productName = rootNode.get(MavenProperty.NAME.key).asText();
 
-    GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
-    GitHubUtils.commitNewFile(repository,
-        BRANCH_NAME,
-        POM,
-        "Update POM module",
-        MavenUtils.convertModelToString(mavenModels.pom()));
-    GitHubUtils.createPullRequest(ghActor,
-        repository,
-        BRANCH_NAME,
-        "Fix: Add missing Maven artifact blocks",
-        "This PR adds missing Maven artifact blocks to all `meta.json` files in the repository.");
-    return modified;
+    ObjectNode appArtifactNode = objectMapper.createObjectNode().
+        put(MavenProperty.KEY.key, productId).put(MavenProperty.NAME.key, APP_NAME_PATTERN.formatted(productName))
+        .put(MavenProperty.GROUP_ID.key, productGroupId)
+        .put(MavenProperty.ARTIFACT_ID.key, productId.concat(APP_POSTFIX))
+        .put(MavenProperty.TYPE.key, MavenProperty.TYPE.defaultValue);
+
+    mavenArtifacts.add(appArtifactNode);
+    writeJSONToFile(metaJsonFile, rootNode);
+    // Create product-app project
+    createAssemblyAppProject(productSource, productId, mavenModels.pom(),
+        mavenModels.pomModules().stream().filter(model -> !StringUtils.endsWith(model.getArtifactId(), "-demo")).toList());
+    return MavenUtils.resolveNewModuleName(mavenModels.pom(), APP_POSTFIX, productId.concat(APP_POSTFIX));
   }
 
   private void createAssemblyAppProject(String ghRepoURL, String productId, Model parentPom, List<Model> mavenModels) throws Exception {
@@ -227,20 +261,21 @@ public class MarketMetaJsonScanner {
     // Create the project folder
     String projectPath = productId + APP_POSTFIX + SLASH;
     AppProject appProject = MavenUtils.createAssemblyAppProject(productId, parentPom, mavenModels);
-    GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + POM, "Created new file", appProject.pom());
-    GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + ASSEMBLY, "Created new file", appProject.assembly());
-    GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + DEPLOY_OPTIONS, "Created new file", appProject.deployOptions());
+    GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + POM, CREATED_NEW_FILE_MESSAGE, appProject.pom());
+    GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + ASSEMBLY, CREATED_NEW_FILE_MESSAGE, appProject.assembly());
+    GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + DEPLOY_OPTIONS, CREATED_NEW_FILE_MESSAGE, appProject.deployOptions());
     LOG.info("Project created successfully inside the repository!");
   }
 
-  private boolean isMissingAppArtifact(String productId, ArrayNode mavenArtifacts, String postfix) {
+  private boolean isMissingRequiredArtifact(String productId, ArrayNode mavenArtifacts, String postfix) {
     boolean missingNode = true;
+    var requiredArtifactId = productId.concat(postfix);
     for (JsonNode artifact : mavenArtifacts) {
       var key = artifact.get(MavenProperty.KEY.key);
       var artifactId = artifact.get(MavenProperty.ARTIFACT_ID.key);
 
-      if (key != null && key.asText().equals(productId)
-          && artifactId != null && artifactId.asText().equals(productId.concat(postfix))) {
+      if (key != null && StringUtils.equals(key.asText(), productId)
+          && artifactId != null && StringUtils.equals(artifactId.asText(), requiredArtifactId)) {
         missingNode = false;
         break;
       }

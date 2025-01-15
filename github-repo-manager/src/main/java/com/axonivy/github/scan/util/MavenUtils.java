@@ -2,8 +2,10 @@ package com.axonivy.github.scan.util;
 
 import com.axonivy.github.Logger;
 import com.axonivy.github.constant.Constants;
+import com.axonivy.github.scan.enums.MavenProperty;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.SystemUtils;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
@@ -11,10 +13,13 @@ import org.apache.maven.model.io.xpp3.MavenXpp3Writer;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.kohsuke.github.GHContent;
 import org.kohsuke.github.GHRepository;
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.StringWriter;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -26,6 +31,11 @@ public class MavenUtils {
   private static final String KEY_START = "${";
   private static final String KEY_END = "}";
   private static final String KEY_PLACEHOLDER = KEY_START + "%s" + KEY_END;
+  private static final String MVN = "mvn ";
+  private static final String MVN_WIN = "mvn.cmd ";
+  private static final String MVN_CMD_PATTERN = "-f %s/pom.xml -Dmaven.test.skip=true -DaltDeploymentRepository=github::default::https://maven.pkg.github.com/%s";
+  private static final String MAVEN_META_STATUS_PATTERN = "https://maven.axonivy.com/%s/maven-metadata.xml";
+  private static final String DEPLOY_CMD = "--batch-mode deploy ";
 
   public static MavenModel findMavenModels(GHRepository repository) throws XmlPullParserException {
     Objects.requireNonNull(repository);
@@ -151,6 +161,57 @@ public class MavenUtils {
       }
     }
     return moduleName;
+  }
+
+  public static List<String> getMavenVersionsFromXML(String xmlData) {
+    Document document = getDocumentFromXMLContent(xmlData);
+    if (document == null) {
+      return List.of();
+    }
+    NodeList versionList = document.getElementsByTagName(VERSION.key);
+    List<String> versions = new ArrayList<>();
+    for (int i = 0; i < versionList.getLength(); i++) {
+      versions.add(versionList.item(i).getTextContent());
+    }
+    return versions;
+  }
+
+  public static Document getDocumentFromXMLContent(String xmlData) {
+    try {
+      DocumentBuilder builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
+      Document document = builder.parse(new InputSource(new StringReader(xmlData)));
+      document.getDocumentElement().normalize();
+      return document;
+    } catch (Exception e) {
+      LOG.error("Can not read the metadata of {0} with error {1}", xmlData, e);
+    }
+    return null;
+  }
+
+  public static int executeMavenDeployCommand(File projectDir, String moduleName, String repoFullName)
+      throws IOException, InterruptedException {
+    String goal = MVN_CMD_PATTERN.formatted(moduleName, repoFullName);
+    String mavenCommand = SystemUtils.IS_OS_WINDOWS ? MVN_WIN : MVN;
+    mavenCommand = mavenCommand.concat(DEPLOY_CMD).concat(goal);
+    LOG.info("Executing Maven command: {0}", mavenCommand);
+    ProcessBuilder processBuilder = new ProcessBuilder(mavenCommand.split(StringUtils.SPACE));
+    processBuilder.directory(projectDir);
+    processBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+    processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+    // Start the process and wait for finished
+    Process process = processBuilder.start();
+    int exitCode = process.waitFor();
+    if (exitCode == 0) {
+      LOG.info("Maven command executed successfully.");
+    } else {
+      LOG.error("Maven command failed with exit code: {0}", exitCode);
+    }
+    return exitCode;
+  }
+
+  public static String getMetadataStatusURL(String artifactName) {
+    return String.format(MAVEN_META_STATUS_PATTERN, artifactName);
   }
 
   public record AppProject(String pom, String assembly, String deployOptions) {

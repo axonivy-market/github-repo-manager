@@ -7,6 +7,8 @@ public class Constants {
   public static final String DOT = ".";
   public static final String COMMA = ",";
   public static final String APP_POSTFIX = "-app";
+  public static final String DEMO_POSTFIX = "-demo";
+  public static final String DEMOS_POSTFIX = "-demos";
   public static final String DEMO_APP_POSTFIX = "-demo-app";
   public static final String PRODUCT_POSTFIX = "-product";
   public static final String TEST_POSTFIX = "-test";

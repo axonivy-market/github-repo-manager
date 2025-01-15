@@ -17,4 +17,13 @@ public class ScanUtils {
     var ignoreRepos = System.getProperty(PRO_PREFIX + "IGNORE.REPOS");
     return StringUtils.isBlank(ignoreRepos) ? List.of() : Arrays.asList(ignoreRepos.split(Constants.COMMA));
   }
+
+  public static Integer[] getVersionRange() {
+    var versionRange = System.getProperty(PRO_PREFIX + "VERSION.RANGE");
+    if (StringUtils.isBlank(versionRange)) {
+      return new Integer[]{};
+    }
+    var versions = versionRange.split(Constants.COMMA);
+    return new Integer[]{Integer.parseInt(versions[0]), Integer.parseInt(versions[1])};
+  }
 }

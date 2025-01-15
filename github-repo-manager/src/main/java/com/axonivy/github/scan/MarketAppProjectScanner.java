@@ -5,7 +5,9 @@ import com.axonivy.github.GitHubProvider;
 import com.axonivy.github.Logger;
 import com.axonivy.github.constant.Constants;
 import com.axonivy.github.scan.util.MavenUtils;
+import com.axonivy.github.scan.util.ScanUtils;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.SystemUtils;
 import org.apache.maven.model.Model;
@@ -28,6 +30,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static com.axonivy.github.constant.Constants.*;
+import static org.apache.commons.lang3.StringUtils.EMPTY;
 
 public class MarketAppProjectScanner {
   private static final Logger LOG = new Logger();
@@ -40,81 +43,30 @@ public class MarketAppProjectScanner {
   private static final String DEFAULT_BRANCH = "master";
   private final String ghActor;
   private final GHRepository repository;
-  private final Set<String> appProjects;
   private int status;
 
   public MarketAppProjectScanner(String ghActor, String repoName) throws IOException {
     this.ghActor = ghActor;
     repository = GitHubProvider.getGithubByToken().getRepository(repoName);
-    appProjects = new HashSet<>();
     status = 0;
   }
 
-  public static Document getDocumentFromXMLContent(String xmlData) {
-    try {
-      DocumentBuilder builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
-      Document document = builder.parse(new InputSource(new StringReader(xmlData)));
-      document.getDocumentElement().normalize();
-      return document;
-    } catch (Exception e) {
-      LOG.error("Can not read the metadata of {0} with error {1}", xmlData, e);
-    }
-    return null;
-  }
-
-  public static void deleteDirectory(File file) throws IOException {
-    Objects.requireNonNull(file);
-    LOG.info("Delete {0}", file.getPath());
-    try {
-      FileUtils.deleteDirectory(file);
-    } catch (IOException e) {
-      LOG.error("Cannot delete directory {0}", file.getPath());
-    } finally {
-      FileUtils.deleteDirectory(file);
-    }
-  }
-
   private String findProductArtifactModule(Model pom) {
-    String productArtifactModule = StringUtils.EMPTY;
-    for (var module : pom.getModules()) {
-      if (StringUtils.endsWithAny(module, APP_POSTFIX, DEMO_APP_POSTFIX)) {
-        appProjects.add(module);
-      }
-      if (StringUtils.endsWith(module, Constants.PRODUCT_POSTFIX)) {
-        // Use the last item
-        productArtifactModule = module;
-      }
-    }
-    return productArtifactModule;
+    Objects.requireNonNull(pom);
+    return Optional.ofNullable(pom.getModules()).stream().flatMap(List::stream)
+        .filter(module -> StringUtils.endsWith(module, Constants.PRODUCT_POSTFIX))
+        .findAny().orElse(EMPTY);
   }
 
-  private void executeMavenCommand(File projectDir, String goal) throws IOException, InterruptedException {
-    String mavenCommand = MVN;
-    if (SystemUtils.IS_OS_WINDOWS) {
-      LOG.info("Running on WIN OS");
-      mavenCommand = MVN_WIN;
-    }
-    mavenCommand = mavenCommand.concat(DEPLOY_CMD).concat(goal);
-    LOG.info("Executing Maven command: {0}", mavenCommand);
-    ProcessBuilder processBuilder = new ProcessBuilder(mavenCommand.split(StringUtils.SPACE));
-    processBuilder.directory(projectDir);
-    processBuilder.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-    processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
-
-    // Start the process and wait for finished
-    Process process = processBuilder.start();
-    int exitCode = process.waitFor();
-    if (exitCode == 0) {
-      LOG.info("Maven command executed successfully.");
-    } else {
-      LOG.error("Maven command failed with exit code: {0}", exitCode);
-    }
+  private List<String> collectAppArtifactModules(Model pom) {
+    Objects.requireNonNull(pom);
+    return Optional.ofNullable(pom.getModules()).stream().flatMap(List::stream)
+        .filter(module -> StringUtils.endsWithAny(module, APP_POSTFIX, DEMO_APP_POSTFIX))
+        .distinct().toList();
   }
 
   public int proceed() throws IOException, InterruptedException, GitAPIException {
-    File localRepoDir = new File(WORK_DIR + SLASH + repository.getName());
-    deleteDirectory(localRepoDir);
-    cloneRepository(localRepoDir);
+    File localRepoDir = cloneNewRepository();
     final String rootLocation = localRepoDir.getAbsolutePath();
     Model pom = readModulePom(rootLocation);
     if (pom == null) {
@@ -125,7 +77,8 @@ public class MarketAppProjectScanner {
 
     String productArtifactModule = findProductArtifactModule(pom);
     if (StringUtils.isBlank(productArtifactModule)) {
-      // Find in sub-folder
+      // Find in sub-folder, e.g: "axonivy-market/demo-projects"
+      // Only proceed the second level, e.g: "axonivy-market/demo-projects/connectivity"
       for (var module : pom.getModules()) {
         Model pomItem = readModulePom(rootLocation + Constants.SLASH + module);
         if (pomItem == null) {
@@ -134,36 +87,50 @@ public class MarketAppProjectScanner {
         }
         productArtifactModule = findProductArtifactModule(pomItem);
         if (StringUtils.isNoneBlank(productArtifactModule)) {
-          checkAppArtifactsForTargetGroup(pomItem, productArtifactModule, localRepoDir);
+          checkAndReleaseNewAppArtifactsForTargetPOM(pomItem, productArtifactModule, localRepoDir);
         }
       }
     } else {
-      checkAppArtifactsForTargetGroup(pom, productArtifactModule, localRepoDir);
+      checkAndReleaseNewAppArtifactsForTargetPOM(pom, productArtifactModule, localRepoDir);
     }
     return status;
   }
 
-  private void checkAppArtifactsForTargetGroup(Model pom, String productArtifactModule, File localRepoDir)
+  /**
+   * Read the maven metadata-status of product artifact.
+   * Then check the available app project based on major version from product artifact.
+   * If missing, crease a new release for highest major version.
+   * @param pom the pom file where the product artifact module was defined
+   * @param productArtifactModule product module name of the product
+   * @param localRepoDir working directory of the repo
+   */
+  private void checkAndReleaseNewAppArtifactsForTargetPOM(Model pom, String productArtifactModule, File localRepoDir)
       throws IOException, InterruptedException {
-    var mavenURLs = StringUtils.replace(pom.getGroupId(), DOT, Constants.SLASH).concat(SLASH);
-    Document productMetadataXML = getDocumentFromXMLContent(openStreamFromPath(String.format(MAVEN_META_STATUS_PATTERN, mavenURLs.concat(productArtifactModule))));
-    if (productMetadataXML == null) {
-      LOG.info("There is no product metadata-status available on maven repo");
+    var mavenURLs = StringUtils.replace(pom.getGroupId(), DOT, SLASH).concat(SLASH);
+    String productXMLResponse = openStreamFromPath(MavenUtils.getMetadataStatusURL(mavenURLs.concat(productArtifactModule)));
+    List<String> mavenVersions = MavenUtils.getMavenVersionsFromXML(productXMLResponse);
+    if (ObjectUtils.isEmpty(mavenVersions)) {
+      LOG.info("There is no product version available on maven repo");
       status = 1;
       return;
     }
-    NodeList versionList = productMetadataXML.getElementsByTagName("version");
-    List<String> proceedVersions = unifyVersionMustToRelease(versionList);
+    List<String> proceedVersions = unifyVersionMustToRelease(mavenVersions);
+    if (ObjectUtils.isEmpty(proceedVersions)) {
+      LOG.info("No product version need to be adapt");
+      return;
+    }
 
-    for (var app : appProjects) {
-      if (openStreamFromPath(String.format(MAVEN_META_STATUS_PATTERN, mavenURLs.concat(app))) == null) {
+    for (var app : collectAppArtifactModules(pom)) {
+      String appMetaResponse = openStreamFromPath(String.format(MAVEN_META_STATUS_PATTERN, mavenURLs.concat(app)));
+      if (StringUtils.isBlank(appMetaResponse)) {
         LOG.info("No {0} artifact available on Maven repo", app);
         if (DryRun.is()) {
-          LOG.info("DRY RUN: Missing an app artifact");
+          LOG.info("DRY RUN: Missing {0} artifact with {1} version(s). Please run with DRYRUN=false to update", app, proceedVersions);
           status = 1;
           return;
         }
 
+        LOG.info("Start deploying the {0} artifact with {1} version(s) to Maven repo", app, proceedVersions);
         deployNewAppArtifactToRepo(localRepoDir, app, proceedVersions);
       }
     }
@@ -174,7 +141,8 @@ public class MarketAppProjectScanner {
     for (var version : versions) {
       LOG.info("Start building the {0} project with {1} version", app, version);
       updatePOMVersion(localDir, app, version);
-      executeMavenCommand(localDir, MVN_CMD_PATTERN.formatted(app, repository.getFullName()));
+      int executedStatus = MavenUtils.executeMavenDeployCommand(localDir, app, repository.getFullName());
+      status = executedStatus != 0 ? executedStatus : status;
     }
   }
 
@@ -197,12 +165,18 @@ public class MarketAppProjectScanner {
         StandardCharsets.UTF_8);
   }
 
-  private List<String> unifyVersionMustToRelease(NodeList versionList) {
-    List<String> versions = new ArrayList<>();
-    for (int i = 0; i < versionList.getLength(); i++) {
-      versions.add(versionList.item(i).getTextContent());
-    }
-    return versions.stream()
+  private List<String> unifyVersionMustToRelease(List<String> versionList) {
+    Integer[] configRangeVersions = ScanUtils.getVersionRange();
+    return Optional.ofNullable(versionList).stream()
+        .flatMap(List::stream)
+        .filter(version -> {
+          if (configRangeVersions.length == 0) {
+            return true;
+          }
+          String[] parts = version.split(MAJOR_VERSION_REGEX);
+          int major = Integer.parseInt(parts[0]);
+          return major >= configRangeVersions[0] && major <= configRangeVersions[1];
+        })
         .collect(Collectors.groupingBy(version -> version.split(MAJOR_VERSION_REGEX)[0]))
         .values().stream().map(Collections::max)
         .sorted().toList();
@@ -212,7 +186,7 @@ public class MarketAppProjectScanner {
     try (var input = new URL(path).openStream()) {
       return new String(input.readAllBytes());
     } catch (FileNotFoundException | MalformedURLException e) {
-      LOG.error("Cannot open URL {0} by {1}", path, e.getMessage());
+      LOG.error("Cannot open URL {0}", e);
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
@@ -229,15 +203,35 @@ public class MarketAppProjectScanner {
     return null;
   }
 
-  private void cloneRepository(File directory) throws GitAPIException {
+  /**
+   * Check and clean the existing repo directory.
+   * Then cloning the code from target repo.
+   * @return cloned repo directory
+   * @throws GitAPIException When got a JGit issue
+   * @throws IOException When got a File IO issue
+   */
+  private File cloneNewRepository() throws GitAPIException, IOException {
+    File localRepoDir = new File(WORK_DIR + SLASH + repository.getName());
+    String localPath = localRepoDir.getPath();
+    LOG.info("Delete {0} directory", localPath);
+    try {
+      FileUtils.deleteDirectory(localRepoDir);
+    } catch (IOException e) {
+      LOG.error("Cannot delete {0} directory", localPath);
+    } finally {
+      // Try to delete the root directory
+      FileUtils.deleteDirectory(localRepoDir);
+    }
+
     LOG.info("Cloning repository...");
     Git git = Git.cloneRepository()
         .setURI(repository.getHtmlUrl().toString())
-        .setDirectory(directory)
+        .setDirectory(localRepoDir)
         .setCredentialsProvider(GitHubProvider.createCredentialFor(ghActor))
         .setBranch(DEFAULT_BRANCH)
         .call();
-    LOG.info("Repository cloned from {0} into: {1} folder", DEFAULT_BRANCH, directory.toPath());
+    LOG.info("Repository cloned from {0} into: {1} folder", DEFAULT_BRANCH, localPath);
     git.close();
+    return localRepoDir;
   }
 }
