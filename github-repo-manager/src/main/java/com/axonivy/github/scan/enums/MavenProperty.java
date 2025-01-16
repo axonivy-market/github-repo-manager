@@ -21,7 +21,7 @@ public enum MavenProperty {
   }
 
   public static String combineProperty(MavenProperty... properties) {
-    return StringUtils.joinWith(Constants.DOT, Stream.of(properties).map(MavenProperty::getKey));
+    return StringUtils.joinWith(Constants.DOT, Stream.of(properties).map(MavenProperty::getKey).toArray());
   }
 
   public String getKey() {
