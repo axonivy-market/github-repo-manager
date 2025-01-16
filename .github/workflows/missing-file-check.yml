@@ -11,8 +11,6 @@ on:
       workingOrgs:
         description: 'Define organizations to check SECURITY.md, CODE_OF_CONDUCT.md and LICENSE, example: axonivy-market'
         default: 'axonivy-market'
-  push:
-    branches: [ "master" ]
 
 jobs:
   build:

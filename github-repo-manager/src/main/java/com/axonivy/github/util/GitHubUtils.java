@@ -2,6 +2,7 @@ package com.axonivy.github.util;
 
 import com.axonivy.github.DryRun;
 import com.axonivy.github.Logger;
+import org.apache.commons.lang3.StringUtils;
 import org.kohsuke.github.GHPullRequest;
 import org.kohsuke.github.GHRepository;
 import org.kohsuke.github.GHUser;
@@ -15,6 +16,11 @@ public class GitHubUtils {
   private static final Logger LOG = new Logger();
 
   public static void createBranchIfMissing(GHRepository repository, String branchName) {
+    if (DryRun.is()) {
+      LOG.info("DRY RUN: ");
+      LOG.info("Branch created: {0}", branchName);
+      return;
+    }
     try {
       repository.createRef(GIT_HEAD.concat(branchName),
           repository.getBranch(repository.getDefaultBranch()).getSHA1());
@@ -47,6 +53,11 @@ public class GitHubUtils {
 
   public static void createPullRequest(GHUser ghActor, GHRepository repository, String branch, String title, String message)
       throws IOException {
+    if (DryRun.is()) {
+      LOG.info("DRY RUN: ");
+      LOG.info("Pull request created: {0}", title);
+      return;
+    }
     try {
       GHPullRequest pullRequest = repository.createPullRequest(title,
           branch,
@@ -62,7 +73,7 @@ public class GitHubUtils {
   }
 
   public static String extractActor(String[] args) {
-    String user = "";
+    String user = StringUtils.EMPTY;
     if (args.length > 0) {
       user = args[0];
       LOG.info("Running updates triggered by user " + user);

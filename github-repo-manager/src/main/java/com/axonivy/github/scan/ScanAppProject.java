@@ -14,12 +14,20 @@ public class ScanAppProject {
       LOG.info("No repo was submitted, job ended!");
       System.exit(0);
     }
+    int status = 0;
     try {
-      var marketAppProjectScanner = new MarketAppProjectScanner(GitHubUtils.extractActor(args), ScanUtils.getProceedRepo());
-      marketAppProjectScanner.proceed();
+      var marketAppProjectScanner = new MarketAppProjectScanner(GitHubUtils.extractActor(args),
+          ScanUtils.getProceedRepo());
+      status = marketAppProjectScanner.proceed();
+      if (status != 0) {
+        LOG.error("At least one issue is found during scanning");
+      }
     } catch (Exception e) {
-      LOG.error("Scan AppProject failed {0}", e.getMessage());
+      LOG.error("Scan AppProject failed by {0}", e.getMessage());
+      System.exit(1);
     }
+    LOG.info("Scan AppProject completed");
+    System.exit(status);
   }
 }
 
