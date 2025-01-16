@@ -38,8 +38,13 @@ public class GitHubUtils {
     try {
       GHContent requestFile = repository.getFileContent(path, branch);
       if (requestFile != null) {
-        LOG.error("File already exists, skip update: {0}/{1}", branch, path);
-        status = 1;
+        if (force) {
+          requestFile.update(content, message);
+          LOG.info("File already exists, forced update: {0}/{1}", branch, path);
+        } else {
+          LOG.error("File already exists, skip update: {0}/{1}", branch, path);
+          status = 1;
+        }
       }
     } catch (Exception e) {
       repository.createContent()
