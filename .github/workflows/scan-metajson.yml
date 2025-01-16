@@ -45,4 +45,4 @@ jobs:
             -Dexec.mainClass="com.axonivy.github.scan.ScanMetaJsonFiles" \
             -Dexec.args="${{ github.actor }}" \
             -DGITHUB.MARKET.REPO="${{ github.event.inputs.repository }}" \
-            -DGITHUB.MARKET.IGNORE.REPOS="${{ env.IGNORE_REPOS }}"
+            -DGITHUB.MARKET.IGNORE.REPOS="${{ vars.IGNORE_REPOS }}"

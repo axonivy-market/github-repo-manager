@@ -45,4 +45,4 @@ jobs:
             -Dexec.mainClass="com.axonivy.github.scan.ScanAppProject" \
             -Dexec.args="${{ github.actor }}" \
             -DGITHUB.MARKET.REPO="${{ github.event.inputs.repository }}" \
-            -DGITHUB.MARKET.VERSION.RANGE="${{ env.VERSION_RANGE }}"
+            -DGITHUB.MARKET.VERSION.RANGE="${{ vars.VERSION_RANGE }}"
