@@ -28,7 +28,7 @@ public class GitHubUtils {
     return status;
   }
 
-  public static int commitNewFile(GHRepository repository, String branch, String path, String message, String content)
+  public static int commitFileChanges(GHRepository repository, String branch, String path, String message, String content, boolean force)
       throws Exception {
     int status = 0;
     if (DryRun.is()) {

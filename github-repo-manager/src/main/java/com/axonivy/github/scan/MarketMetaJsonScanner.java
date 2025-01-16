@@ -134,8 +134,8 @@ public class MarketMetaJsonScanner {
       // Create a new branch
       GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
       // Commit changes
-      GitHubUtils.commitNewFile(repository, BRANCH_NAME, content.getPath(), COMMIT_META_MESSAGE,
-          FileUtils.readFileToString(metaJsonFile, StandardCharsets.UTF_8));
+      GitHubUtils.commitFileChanges(repository, BRANCH_NAME, content.getPath(), COMMIT_META_MESSAGE,
+          FileUtils.readFileToString(metaJsonFile, StandardCharsets.UTF_8), true);
       // Create a pull request
       GitHubUtils.createPullRequest(ghActor, repository, BRANCH_NAME, COMMIT_MISSING_MAVEN_ARTIFACT_TITLE,
           MISSING_MAVEN_ARTIFACT_MESSAGE);
@@ -178,7 +178,7 @@ public class MarketMetaJsonScanner {
     if (modified) {
       LOG.info("Update pom.xml for {0} to include new modules", productSource);
       GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
-      GitHubUtils.commitNewFile(repository, BRANCH_NAME, POM, COMMIT_POM_MODULE_MESSAGE, MavenUtils.convertModelToString(mavenModels.pom()));
+      GitHubUtils.commitFileChanges(repository, BRANCH_NAME, POM, COMMIT_POM_MODULE_MESSAGE, MavenUtils.convertModelToString(mavenModels.pom()), true);
       GitHubUtils.createPullRequest(ghActor, repository, BRANCH_NAME, COMMIT_MISSING_MAVEN_ARTIFACT_TITLE, MISSING_MAVEN_ARTIFACT_MESSAGE);
     }
     return modified;
@@ -259,11 +259,11 @@ public class MarketMetaJsonScanner {
     // Create the project folder
     String projectPath = productId + APP_POSTFIX + SLASH;
     AppProject appProject = MavenUtils.createAssemblyAppProject(productId, parentPom, mavenModels);
-    returnedStatus = GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + POM, COMMIT_NEW_FILE_MESSAGE.formatted(POM), appProject.pom());
+    returnedStatus = GitHubUtils.commitFileChanges(repository, BRANCH_NAME, projectPath + POM, COMMIT_NEW_FILE_MESSAGE.formatted(POM), appProject.pom(), false);
     status = returnedStatus != 0 ? returnedStatus : status;
-    returnedStatus = GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + ASSEMBLY, COMMIT_NEW_FILE_MESSAGE.formatted(ASSEMBLY), appProject.assembly());
+    returnedStatus = GitHubUtils.commitFileChanges(repository, BRANCH_NAME, projectPath + ASSEMBLY, COMMIT_NEW_FILE_MESSAGE.formatted(ASSEMBLY), appProject.assembly(), false);
     status = returnedStatus != 0 ? returnedStatus : status;
-    returnedStatus = GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + DEPLOY_OPTIONS, COMMIT_NEW_FILE_MESSAGE.formatted(DEPLOY_OPTIONS), appProject.deployOptions());
+    returnedStatus = GitHubUtils.commitFileChanges(repository, BRANCH_NAME, projectPath + DEPLOY_OPTIONS, COMMIT_NEW_FILE_MESSAGE.formatted(DEPLOY_OPTIONS), appProject.deployOptions(), false);
     status = returnedStatus != 0 ? returnedStatus : status;
     if (status == 0) {
       LOG.info("Project created successfully inside the {0} repository!", ghRepoURL);
