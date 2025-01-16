@@ -1,6 +1,5 @@
 package com.axonivy.github.scan;
 
-import com.axonivy.github.DryRun;
 import com.axonivy.github.GitHubProvider;
 import com.axonivy.github.Logger;
 import com.axonivy.github.constant.Constants;
@@ -37,18 +36,17 @@ import static com.axonivy.github.constant.Constants.*;
 
 public class MarketMetaJsonScanner {
   private static final Logger LOG = new Logger();
-
-  private static final String MARKET_FOLDER_PATH = "market";
-  private static final String META_JSON = "meta.json";
-  private static final String BRANCH_NAME = "fix-missing-maven-artifacts";
-  private static final String COMMIT_MESSAGE = "Fix: Add missing Maven artifact blocks to meta.json files";
   private static final String APP_NAME_PATTERN = "%s App";
   private static final String DEMO_APP_NAME_PATTERN = "%s Demo App";
-  private static final ObjectMapper objectMapper = new ObjectMapper();
-  public static final String UPDATE_POM_MODULE_MESSAGE = "Update POM module";
-  public static final String FIX_ADD_MISSING_MAVEN_ARTIFACT_TITLE = "Fix: Add missing Maven artifact blocks";
-  public static final String FIX_ADD_MISSING_MAVEN_ARTIFACT_MESSAGE = "This PR adds missing Maven artifact blocks to all `meta.json` files in the repository.";
-  public static final String CREATED_NEW_FILE_MESSAGE = "Created new file";
+  private static final String ROOT_FOLDER = "market";
+  private static final String META_JSON = "meta.json";
+  private static final String BRANCH_NAME = "MARP-1872-Export-MarketPlace-Components-from-Designer-with-Dependencies";
+  private static final String COMMIT_META_MESSAGE = "Add missing Maven artifact blocks to meta.json files";
+  public static final String COMMIT_POM_MODULE_MESSAGE = "Update POM module";
+  public static final String COMMIT_MISSING_MAVEN_ARTIFACT_TITLE = "Add missing Maven artifact blocks";
+  public static final String MISSING_MAVEN_ARTIFACT_MESSAGE = "This PR adds missing Maven artifact blocks to all `meta.json` files in the repository.";
+  public static final String COMMIT_NEW_FILE_MESSAGE = "Created %s file";
+  private final ObjectMapper objectMapper;
   private final GitHub gitHub;
   private final GHUser ghActor;
   private final String marketRepo;
@@ -57,6 +55,7 @@ public class MarketMetaJsonScanner {
 
   public MarketMetaJsonScanner(String user, String marketRepo, List<String> ignoreRepos) throws IOException {
     Objects.requireNonNull(marketRepo);
+    this.objectMapper = new ObjectMapper();
     this.gitHub = GitHubProvider.getGithubByToken();
     this.ghActor = gitHub.getUser(user);
     this.marketRepo = marketRepo;
@@ -67,10 +66,9 @@ public class MarketMetaJsonScanner {
     try (InputStream inputStream = new URL(content.getDownloadUrl()).openStream()) {
       FileUtils.copyInputStreamToFile(inputStream, targetFile);
     }
-    LOG.info("Downloaded: {0}", targetFile.getAbsolutePath());
   }
 
-  private static void writeJSONToFile(File metaJsonFile, ObjectNode rootNode) throws IOException {
+  private void writeJSONToFile(File metaJsonFile, ObjectNode rootNode) throws IOException {
     DefaultPrettyPrinter.Indenter indenter = new DefaultIndenter("    ", DefaultIndenter.SYS_LF);
     DefaultPrettyPrinter printer = new DefaultPrettyPrinter();
     printer.indentObjectsWith(indenter);
@@ -80,9 +78,9 @@ public class MarketMetaJsonScanner {
 
   public int process() throws Exception {
     anyChanges = false;
-    for (GHContent content : gitHub.getRepository(marketRepo).getDirectoryContent(MARKET_FOLDER_PATH)) {
-      LOG.info("Proceed {0}", content.getName());
+    for (GHContent content : gitHub.getRepository(marketRepo).getDirectoryContent(ROOT_FOLDER)) {
       if (isIgnoreRepo(content)) {
+        LOG.info("Ignore folder: {0}", content.getName());
         continue;
       }
 
@@ -98,8 +96,8 @@ public class MarketMetaJsonScanner {
   private void findMetaPath(GHContent ghContent) throws Exception {
     for (var content : ghContent.listDirectoryContent()) {
       if (content.isDirectory()) {
-        LOG.info("Proceed {0} product", content.getName());
         if (isIgnoreRepo(content)) {
+          LOG.info("Ignore folder: {0}", content.getName());
           continue;
         }
         findMetaPath(content);
@@ -123,6 +121,7 @@ public class MarketMetaJsonScanner {
     if (!content.isFile() || !META_JSON.equals(content.getName())) {
       return;
     }
+    LOG.info("Proceed {0}", content.getPath());
     // Download the meta.json file from the subfolder
     File metaJsonFile = new File(Constants.WORK_DIR.concat(SLASH).concat(content.getPath()));
     downloadFile(content, metaJsonFile);
@@ -130,15 +129,16 @@ public class MarketMetaJsonScanner {
     boolean modified = modifyMetaJsonFile(metaJsonFile);
     anyChanges = modified || anyChanges;
     if (anyChanges) {
+      LOG.info("Update meta.json for {0} to include app project", content.getPath());
       GHRepository repository = gitHub.getRepository(marketRepo);
       // Create a new branch
       GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
       // Commit changes
-      GitHubUtils.commitNewFile(repository, BRANCH_NAME, content.getPath(), COMMIT_MESSAGE,
+      GitHubUtils.commitNewFile(repository, BRANCH_NAME, content.getPath(), COMMIT_META_MESSAGE,
           FileUtils.readFileToString(metaJsonFile, StandardCharsets.UTF_8));
       // Create a pull request
-      GitHubUtils.createPullRequest(ghActor, repository, BRANCH_NAME, FIX_ADD_MISSING_MAVEN_ARTIFACT_TITLE,
-          FIX_ADD_MISSING_MAVEN_ARTIFACT_MESSAGE);
+      GitHubUtils.createPullRequest(ghActor, repository, BRANCH_NAME, COMMIT_MISSING_MAVEN_ARTIFACT_TITLE,
+          MISSING_MAVEN_ARTIFACT_MESSAGE);
     } else {
       LOG.info("No changes were necessary.");
     }
@@ -164,18 +164,23 @@ public class MarketMetaJsonScanner {
 
     String rootProductId = rootNode.get(MavenProperty.ID.key).asText();
     if (isRequiredAppArtifact(mavenModels, artifactIds, rootProductId, mavenArtifacts)) {
+      LOG.info("Need to create a new {0}-app.zip project!", rootProductId);
       String appModule = createNewAppArtifact(metaJsonFile, mavenArtifacts, rootNode, mavenModels);
       mavenModels.pom().getModules().add(appModule);
       modified = true;
     }
     if (isRequiredDemoAppArtifact(artifactIds, rootProductId, mavenArtifacts)) {
+      LOG.info("Need to create a new {0}-demo-app.zip project!", rootProductId);
       String demoAppModule = createNewDemoAppArtifact(metaJsonFile, mavenArtifacts, rootNode, mavenModels);
       mavenModels.pom().getModules().add(demoAppModule);
       modified = true;
     }
-    GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
-    GitHubUtils.commitNewFile(repository, BRANCH_NAME, POM, UPDATE_POM_MODULE_MESSAGE, MavenUtils.convertModelToString(mavenModels.pom()));
-    GitHubUtils.createPullRequest(ghActor, repository, BRANCH_NAME, FIX_ADD_MISSING_MAVEN_ARTIFACT_TITLE, FIX_ADD_MISSING_MAVEN_ARTIFACT_MESSAGE);
+    if (modified) {
+      LOG.info("Update pom.xml for {0} to include new modules", productSource);
+      GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
+      GitHubUtils.commitNewFile(repository, BRANCH_NAME, POM, COMMIT_POM_MODULE_MESSAGE, MavenUtils.convertModelToString(mavenModels.pom()));
+      GitHubUtils.createPullRequest(ghActor, repository, BRANCH_NAME, COMMIT_MISSING_MAVEN_ARTIFACT_TITLE, MISSING_MAVEN_ARTIFACT_MESSAGE);
+    }
     return modified;
   }
 
@@ -242,20 +247,29 @@ public class MarketMetaJsonScanner {
 
   private void createAssemblyAppProject(String ghRepoURL, String productId, Model parentPom, List<Model> mavenModels) throws Exception {
     Objects.requireNonNull(ghRepoURL);
+    int status = 0;
     if (StringUtils.startsWith(ghRepoURL, GITHUB_URL)) {
       ghRepoURL = StringUtils.replace(ghRepoURL, GITHUB_URL, "");
     }
     LOG.info("Create an Assembly App Project for {0}", ghRepoURL);
     GHRepository repository = gitHub.getRepository(ghRepoURL);
-    GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
+    int returnedStatus = GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
+    status = returnedStatus != 0 ? returnedStatus : status;
 
     // Create the project folder
     String projectPath = productId + APP_POSTFIX + SLASH;
     AppProject appProject = MavenUtils.createAssemblyAppProject(productId, parentPom, mavenModels);
-    GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + POM, CREATED_NEW_FILE_MESSAGE, appProject.pom());
-    GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + ASSEMBLY, CREATED_NEW_FILE_MESSAGE, appProject.assembly());
-    GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + DEPLOY_OPTIONS, CREATED_NEW_FILE_MESSAGE, appProject.deployOptions());
-    LOG.info("Project created successfully inside the repository!");
+    returnedStatus = GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + POM, COMMIT_NEW_FILE_MESSAGE.formatted(POM), appProject.pom());
+    status = returnedStatus != 0 ? returnedStatus : status;
+    returnedStatus = GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + ASSEMBLY, COMMIT_NEW_FILE_MESSAGE.formatted(ASSEMBLY), appProject.assembly());
+    status = returnedStatus != 0 ? returnedStatus : status;
+    returnedStatus = GitHubUtils.commitNewFile(repository, BRANCH_NAME, projectPath + DEPLOY_OPTIONS, COMMIT_NEW_FILE_MESSAGE.formatted(DEPLOY_OPTIONS), appProject.deployOptions());
+    status = returnedStatus != 0 ? returnedStatus : status;
+    if (status == 0) {
+      LOG.info("Project created successfully inside the {0} repository!", ghRepoURL);
+    } else {
+      LOG.error("Had exception during create project for the {0} repository!", ghRepoURL);
+    }
   }
 
   private boolean isMissingRequiredArtifact(String productId, ArrayNode mavenArtifacts, String postfix) {

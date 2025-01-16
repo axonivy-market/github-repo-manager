@@ -39,7 +39,7 @@ public class MavenUtils {
 
   public static MavenModel findMavenModels(GHRepository repository) throws XmlPullParserException {
     Objects.requireNonNull(repository);
-    LOG.info("Collect all POM files of {0}", repository.getName());
+    LOG.info("Collect all POM files of {0} repo", repository.getName());
     GHContent pomRoot = getPomFileAtRootFolder(repository, EMPTY);
     Model pomRootModel = convertPomToModel(pomRoot);
     if (pomRootModel == null) {

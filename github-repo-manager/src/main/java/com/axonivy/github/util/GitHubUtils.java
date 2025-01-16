@@ -3,10 +3,7 @@ package com.axonivy.github.util;
 import com.axonivy.github.DryRun;
 import com.axonivy.github.Logger;
 import org.apache.commons.lang3.StringUtils;
-import org.kohsuke.github.GHPullRequest;
-import org.kohsuke.github.GHRepository;
-import org.kohsuke.github.GHUser;
-import org.kohsuke.github.HttpException;
+import org.kohsuke.github.*;
 
 import java.io.IOException;
 
@@ -15,31 +12,35 @@ import static com.axonivy.github.constant.Constants.GIT_HEAD;
 public class GitHubUtils {
   private static final Logger LOG = new Logger();
 
-  public static void createBranchIfMissing(GHRepository repository, String branchName) {
+  public static int createBranchIfMissing(GHRepository repository, String branchName) {
+    int status = 0;
     if (DryRun.is()) {
-      LOG.info("DRY RUN: ");
-      LOG.info("Branch created: {0}", branchName);
-      return;
+      LOG.info("DRY RUN:: Branch created: {0}", branchName);
+      return status;
     }
     try {
       repository.createRef(GIT_HEAD.concat(branchName),
           repository.getBranch(repository.getDefaultBranch()).getSHA1());
     } catch (IOException e) {
-      LOG.info("Branch already exists or could not be created: {0}", e.getMessage());
+      LOG.error("Branch already exists or could not be created: {0} {1}", branchName, e.getMessage());
+      status = 1;
     }
+    return status;
   }
 
-  public static void commitNewFile(GHRepository repository, String branch, String path, String message, String content)
+  public static int commitNewFile(GHRepository repository, String branch, String path, String message, String content)
       throws Exception {
+    int status = 0;
     if (DryRun.is()) {
-      LOG.info("DRY RUN: ");
-      LOG.info("File created: {0}", path);
-      return;
+      LOG.info("DRY RUN:: File created: {0}", path);
+      return status;
     }
     try {
-      repository.getFileContent(path, branch)
-          .update(content, message, branch);
-      LOG.info("File already exists, did a update: {0}", path);
+      GHContent requestFile = repository.getFileContent(path, branch);
+      if (requestFile != null) {
+        LOG.error("File already exists, skip update: {0}/{1}", branch, path);
+        status = 1;
+      }
     } catch (Exception e) {
       repository.createContent()
           .path(path)
@@ -49,14 +50,15 @@ public class GitHubUtils {
           .commit();
       LOG.info("File created: {0}", path);
     }
+    return status;
   }
 
-  public static void createPullRequest(GHUser ghActor, GHRepository repository, String branch, String title, String message)
+  public static int createPullRequest(GHUser ghActor, GHRepository repository, String branch, String title, String message)
       throws IOException {
+    int status = 0;
     if (DryRun.is()) {
-      LOG.info("DRY RUN: ");
-      LOG.info("Pull request created: {0}", title);
-      return;
+      LOG.info("DRY RUN:: Pull request created: {0}", title);
+      return status;
     }
     try {
       GHPullRequest pullRequest = repository.createPullRequest(title,
@@ -69,7 +71,9 @@ public class GitHubUtils {
       LOG.info("Pull request created: {0}", pullRequest.getHtmlUrl());
     } catch (HttpException e) {
       LOG.error("An error occurred {0}", e.getMessage());
+      status = 1;
     }
+    return status;
   }
 
   public static String extractActor(String[] args) {
