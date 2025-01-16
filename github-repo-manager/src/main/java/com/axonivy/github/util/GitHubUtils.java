@@ -39,7 +39,7 @@ public class GitHubUtils {
       GHContent requestFile = repository.getFileContent(path, branch);
       if (requestFile != null) {
         if (force) {
-          requestFile.update(content, message);
+          requestFile.update(content, message, branch);
           LOG.info("File already exists, forced update: {0}/{1}", branch, path);
         } else {
           LOG.error("File already exists, skip update: {0}/{1}", branch, path);
