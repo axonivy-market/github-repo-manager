@@ -1,5 +1,7 @@
 package com.axonivy.github.scan;
 
+import org.kohsuke.github.GHRepository;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -7,8 +9,6 @@ import java.nio.file.StandardOpenOption;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import org.kohsuke.github.GHRepository;
 
 public class ScanIssueReporter {
 
@@ -24,9 +24,9 @@ public class ScanIssueReporter {
   }
 
   public void print(String message) {
-      var msg = repo == null ? message : "<b>" + repo.getFullName() + "</b>: " + message;
-      msg = msg + "<br />";
-      printHtml(msg);
+    var msg = repo == null ? message : "<b>" + repo.getFullName() + "</b>: " + message;
+    msg = msg + "<br />";
+    printHtml(msg);
   }
 
   private void printHtml(String msg) {
@@ -44,9 +44,9 @@ public class ScanIssueReporter {
     repo = null;
 
     var sortedIssues = Stream.concat(logIssues.stream(), rnIssues.stream())
-            .distinct()
-            .sorted()
-            .collect(Collectors.toList());
+        .distinct()
+        .sorted()
+        .collect(Collectors.toList());
     print("");
     print("");
     print("<b>Issues Report</b>");
@@ -77,7 +77,7 @@ public class ScanIssueReporter {
       printHtml(kind + " &#x2713;");
     } else {
       printHtml("<span style=\"color: red;\">");
-      printHtml(kind +" &#x2715;");
+      printHtml(kind + " &#x2715;");
     }
     printHtml("<span></td>");
   }
