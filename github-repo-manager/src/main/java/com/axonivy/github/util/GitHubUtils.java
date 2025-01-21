@@ -2,6 +2,8 @@ package com.axonivy.github.util;
 
 import com.axonivy.github.DryRun;
 import com.axonivy.github.Logger;
+import com.axonivy.github.scan.model.CommitModel;
+import com.axonivy.github.scan.model.PullRequestModel;
 import org.apache.commons.lang3.StringUtils;
 import org.kohsuke.github.*;
 
@@ -28,57 +30,60 @@ public class GitHubUtils {
     return status;
   }
 
-  public static int commitFileChanges(GHRepository repository, String branch, String path, String message, String content, boolean force)
-      throws Exception {
+  public static int commitFileChanges(CommitModel commitModel) throws Exception {
+    if (commitModel == null || commitModel.getRepository() == null) {
+      LOG.info("Invalid param for creating new commit");
+      return 1;
+    }
     int status = 0;
     if (DryRun.is()) {
-      LOG.info("DRY RUN:: File created: {0}", path);
+      LOG.info("DRY RUN:: File created: {0}", commitModel.getPath());
       return status;
     }
     try {
-      GHContent requestFile = repository.getFileContent(path, branch);
+      GHContent requestFile = commitModel.getRepository().getFileContent(commitModel.getPath(), commitModel.getBranch());
       if (requestFile != null) {
-        if (force) {
-          requestFile.update(content, message, branch);
-          LOG.info("File already exists, forced update: {0}/{1}", branch, path);
+        if (commitModel.isForce()) {
+          requestFile.update(commitModel.getContent(), commitModel.getMessage(), commitModel.getBranch());
+          LOG.info("File already exists, forced update: {0}/{1}", commitModel.getBranch(), commitModel.getPath());
         } else {
-          LOG.error("File already exists, skip update: {0}/{1}", branch, path);
+          LOG.error("File already exists, skip update: {0}/{1}", commitModel.getBranch(), commitModel.getPath());
           status = 1;
         }
       }
     } catch (Exception e) {
-      repository.createContent()
-          .path(path)
-          .branch(branch)
-          .message(message)
-          .content(content)
+      commitModel.getRepository().createContent()
+          .path(commitModel.getPath())
+          .branch(commitModel.getBranch())
+          .message(commitModel.getMessage())
+          .content(commitModel.getContent())
           .commit();
-      LOG.info("File created: {0}", path);
+      LOG.info("File created: {0}", commitModel.getPath());
     }
     return status;
   }
 
-  public static int createPullRequest(GHUser ghActor, GHRepository repository, String branch, String title, String message)
-      throws IOException {
-    int status = 0;
+  public static void createPullRequest(PullRequestModel pullRequestModel) throws IOException {
+    if (pullRequestModel == null || pullRequestModel.getRepository() == null) {
+      LOG.info("Invalid param for creating new Pull Request");
+      return;
+    }
     if (DryRun.is()) {
-      LOG.info("DRY RUN:: Pull request created: {0}", title);
-      return status;
+      LOG.info("DRY RUN:: Pull request created: {0}", pullRequestModel.getTitle());
+      return;
     }
     try {
-      GHPullRequest pullRequest = repository.createPullRequest(title,
-          branch,
-          repository.getDefaultBranch(),
-          message);
-      if (ghActor != null) {
-        pullRequest.setAssignees(ghActor);
+      GHPullRequest pullRequest = pullRequestModel.getRepository().createPullRequest(pullRequestModel.getTitle(),
+          pullRequestModel.getBranch(),
+          pullRequestModel.getRepository().getDefaultBranch(),
+          pullRequestModel.getMessage());
+      if (pullRequestModel.getGhActor() != null) {
+        pullRequest.setAssignees(pullRequestModel.getGhActor());
       }
       LOG.info("Pull request created: {0}", pullRequest.getHtmlUrl());
     } catch (HttpException e) {
       LOG.error("An error occurred {0}", e.getMessage());
-      status = 1;
     }
-    return status;
   }
 
   public static String extractActor(String[] args) {

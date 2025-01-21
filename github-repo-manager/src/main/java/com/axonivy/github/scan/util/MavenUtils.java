@@ -2,7 +2,8 @@ package com.axonivy.github.scan.util;
 
 import com.axonivy.github.Logger;
 import com.axonivy.github.constant.Constants;
-import com.axonivy.github.scan.enums.MavenProperty;
+import com.axonivy.github.scan.model.AppModel;
+import com.axonivy.github.scan.model.MavenModel;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.SystemUtils;
@@ -77,9 +78,9 @@ public class MavenUtils {
     return null;
   }
 
-  public static AppProject createAssemblyAppProject(String productId, Model parentPom, List<Model> mavenModels)
+  public static AppModel createAssemblyAppProject(String productId, Model parentPom, List<Model> mavenModels)
       throws Exception {
-    return new AppProject(generatePomContent(productId, parentPom, mavenModels),
+    return new AppModel(generatePomContent(productId, parentPom, mavenModels),
         readResourceFile(Constants.ASSEMBLY),
         readResourceFile(Constants.DEPLOY_OPTIONS));
   }
@@ -211,11 +212,5 @@ public class MavenUtils {
 
   public static String getMetadataStatusURL(String artifactName) {
     return String.format(MAVEN_META_STATUS_PATTERN, artifactName);
-  }
-
-  public record AppProject(String pom, String assembly, String deployOptions) {
-  }
-
-  public record MavenModel(Model pom, Set<Model> pomModules) {
   }
 }

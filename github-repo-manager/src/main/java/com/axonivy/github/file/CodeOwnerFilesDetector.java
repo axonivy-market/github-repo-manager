@@ -16,7 +16,8 @@ import java.util.Set;
 public class CodeOwnerFilesDetector extends GitHubMissingFilesDetector {
   private static final Logger LOG = new Logger();
   private static final String CODE_OWNER_FILE_NAME = "CodeOwners.json";
-  private static final TypeReference<List<CodeOwner>> CODE_OWNER_TYPE_REF = new TypeReference<>() { };
+  private static final TypeReference<List<CodeOwner>> CODE_OWNER_TYPE_REF = new TypeReference<>() {
+  };
   private static final String CODE_OWNER_FORMAT = "*  %s";
   private static final ObjectMapper objectMapper = new ObjectMapper();
   private List<CodeOwner> codeOwners;
@@ -39,9 +40,11 @@ public class CodeOwnerFilesDetector extends GitHubMissingFilesDetector {
         if (existingTeams.stream().noneMatch(team -> team.getName().equals(codeOwner.owner))) {
           GHTeam foundTeam = findTeamByName(codeOwner.owner);
           if (foundTeam != null) {
+            existingTeams.add(foundTeam);
+            LOG.info("Added {0} team to repo {1}", codeOwner.owner, repo.getName());
+          } else {
+            LOG.error("Cannot find the team {0}", codeOwner.owner);
           }
-          existingTeams.add(findTeamByName(codeOwner.owner));
-          LOG.info("Added {0} team to repo {1}", codeOwner.owner, repo.getName());
         }
       }
     }

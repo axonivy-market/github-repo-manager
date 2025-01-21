@@ -4,10 +4,12 @@ import com.axonivy.github.GitHubProvider;
 import com.axonivy.github.Logger;
 import com.axonivy.github.constant.Constants;
 import com.axonivy.github.scan.enums.MavenProperty;
-import com.axonivy.github.util.GitHubUtils;
+import com.axonivy.github.scan.model.AppModel;
+import com.axonivy.github.scan.model.CommitModel;
+import com.axonivy.github.scan.model.MavenModel;
+import com.axonivy.github.scan.model.PullRequestModel;
 import com.axonivy.github.scan.util.MavenUtils;
-import com.axonivy.github.scan.util.MavenUtils.AppProject;
-import com.axonivy.github.scan.util.MavenUtils.MavenModel;
+import com.axonivy.github.util.GitHubUtils;
 import com.fasterxml.jackson.core.util.DefaultIndenter;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -31,8 +33,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import static com.axonivy.github.scan.ScanMetaJsonFiles.GITHUB_URL;
 import static com.axonivy.github.constant.Constants.*;
+import static com.axonivy.github.scan.ScanMetaJsonFiles.GITHUB_URL;
 
 public class MarketMetaJsonScanner {
   private static final Logger LOG = new Logger();
@@ -83,17 +85,16 @@ public class MarketMetaJsonScanner {
         LOG.info("Ignore folder: {0}", content.getName());
         continue;
       }
-
-      if (content.isDirectory()) {
-        findMetaPath(content);
-      } else {
-        proceedMetaFile(content);
-      }
+      findMetaPath(content);
     }
     return anyChanges ? 1 : 0;
   }
 
   private void findMetaPath(GHContent ghContent) throws Exception {
+    if (ghContent.isFile()) {
+      proceedMetaFile(ghContent);
+      return;
+    }
     for (var content : ghContent.listDirectoryContent()) {
       if (content.isDirectory()) {
         if (isIgnoreRepo(content)) {
@@ -134,11 +135,22 @@ public class MarketMetaJsonScanner {
       // Create a new branch
       GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
       // Commit changes
-      GitHubUtils.commitFileChanges(repository, BRANCH_NAME, content.getPath(), COMMIT_META_MESSAGE,
-          FileUtils.readFileToString(metaJsonFile, StandardCharsets.UTF_8), true);
+      var commitModel = new CommitModel();
+      commitModel.setRepository(repository);
+      commitModel.setBranch(BRANCH_NAME);
+      commitModel.setPath(content.getPath());
+      commitModel.setMessage(COMMIT_META_MESSAGE);
+      commitModel.setContent(FileUtils.readFileToString(metaJsonFile, StandardCharsets.UTF_8));
+      commitModel.setForce(true);
+      GitHubUtils.commitFileChanges(commitModel);
       // Create a pull request
-      GitHubUtils.createPullRequest(ghActor, repository, BRANCH_NAME, COMMIT_MISSING_MAVEN_ARTIFACT_TITLE,
-          MISSING_MAVEN_ARTIFACT_MESSAGE);
+      var pullRequestModel = new PullRequestModel();
+      pullRequestModel.setRepository(repository);
+      pullRequestModel.setGhActor(ghActor);
+      pullRequestModel.setBranch(BRANCH_NAME);
+      pullRequestModel.setMessage(MISSING_MAVEN_ARTIFACT_MESSAGE);
+      pullRequestModel.setTitle(COMMIT_MISSING_MAVEN_ARTIFACT_TITLE);
+      GitHubUtils.createPullRequest(pullRequestModel);
     } else {
       LOG.info("No changes were necessary.");
     }
@@ -159,27 +171,41 @@ public class MarketMetaJsonScanner {
     MavenModel mavenModels = MavenUtils.findMavenModels(repository);
     Objects.requireNonNull(mavenModels);
     List<String> artifactIds = new ArrayList<>();
-    artifactIds.add(mavenModels.pom().getArtifactId());
-    artifactIds.addAll(mavenModels.pomModules().stream().map(Model::getArtifactId).toList());
+    artifactIds.add(mavenModels.getPom().getArtifactId());
+    artifactIds.addAll(mavenModels.getPomModules().stream().map(Model::getArtifactId).toList());
 
     String rootProductId = rootNode.get(MavenProperty.ID.key).asText();
     if (isRequiredAppArtifact(mavenModels, artifactIds, rootProductId, mavenArtifacts)) {
       LOG.info("Need to create a new {0}-app.zip project!", rootProductId);
       String appModule = createNewAppArtifact(metaJsonFile, mavenArtifacts, rootNode, mavenModels);
-      mavenModels.pom().getModules().add(appModule);
+      mavenModels.getPom().getModules().add(appModule);
       modified = true;
     }
     if (isRequiredDemoAppArtifact(artifactIds, rootProductId, mavenArtifacts)) {
       LOG.info("Need to create a new {0}-demo-app.zip project!", rootProductId);
       String demoAppModule = createNewDemoAppArtifact(metaJsonFile, mavenArtifacts, rootNode, mavenModels);
-      mavenModels.pom().getModules().add(demoAppModule);
+      mavenModels.getPom().getModules().add(demoAppModule);
       modified = true;
     }
     if (modified) {
       LOG.info("Update pom.xml for {0} to include new modules", productSource);
       GitHubUtils.createBranchIfMissing(repository, BRANCH_NAME);
-      GitHubUtils.commitFileChanges(repository, BRANCH_NAME, POM, COMMIT_POM_MODULE_MESSAGE, MavenUtils.convertModelToString(mavenModels.pom()), true);
-      GitHubUtils.createPullRequest(ghActor, repository, BRANCH_NAME, COMMIT_MISSING_MAVEN_ARTIFACT_TITLE, MISSING_MAVEN_ARTIFACT_MESSAGE);
+      var commitModel = new CommitModel();
+      commitModel.setRepository(repository);
+      commitModel.setBranch(BRANCH_NAME);
+      commitModel.setPath(POM);
+      commitModel.setMessage(COMMIT_POM_MODULE_MESSAGE);
+      commitModel.setContent(MavenUtils.convertModelToString(mavenModels.getPom()));
+      commitModel.setForce(true);
+      GitHubUtils.commitFileChanges(commitModel);
+
+      var pullRequestModel = new PullRequestModel();
+      pullRequestModel.setRepository(repository);
+      pullRequestModel.setGhActor(ghActor);
+      pullRequestModel.setBranch(BRANCH_NAME);
+      pullRequestModel.setMessage(MISSING_MAVEN_ARTIFACT_MESSAGE);
+      pullRequestModel.setTitle(COMMIT_MISSING_MAVEN_ARTIFACT_TITLE);
+      GitHubUtils.createPullRequest(pullRequestModel);
     }
     return modified;
   }
@@ -190,7 +216,7 @@ public class MarketMetaJsonScanner {
   }
 
   private boolean isRequiredAppArtifact(MavenModel mavenModels, List<String> artifactIds, String rootProductId, ArrayNode mavenArtifacts) {
-    return !mavenModels.pomModules().stream().filter(id -> !artifactIds.contains(id.getArtifactId())).toList().isEmpty()
+    return !mavenModels.getPomModules().stream().filter(id -> !artifactIds.contains(id.getArtifactId())).toList().isEmpty()
         && isMissingRequiredArtifact(rootProductId, mavenArtifacts, APP_POSTFIX);
   }
 
@@ -206,43 +232,44 @@ public class MarketMetaJsonScanner {
   private String createNewDemoAppArtifact(File metaJsonFile, ArrayNode mavenArtifacts, ObjectNode rootNode, MavenModel mavenModels)
       throws Exception {
     String productSource = extractProductSource(rootNode);
-    String productGroupId = Objects.requireNonNull(mavenModels).pom().getGroupId();
+    String productGroupId = Objects.requireNonNull(mavenModels).getPom().getGroupId();
     String productId = rootNode.get(MavenProperty.ID.key).asText();
     String productName = rootNode.get(MavenProperty.NAME.key).asText();
     ObjectNode appArtifactNode = objectMapper.createObjectNode()
-        .put(MavenProperty.KEY.key, productId)
-        .put(MavenProperty.NAME.key, DEMO_APP_NAME_PATTERN.formatted(productName))
-        .put(MavenProperty.GROUP_ID.key, productGroupId)
-        .put(MavenProperty.ARTIFACT_ID.key, productId.concat(DEMO_APP_POSTFIX))
-        .put(MavenProperty.TYPE.key, MavenProperty.TYPE.defaultValue);
+            .put(MavenProperty.KEY.key, productId)
+            .put(MavenProperty.NAME.key, DEMO_APP_NAME_PATTERN.formatted(productName))
+            .put(MavenProperty.GROUP_ID.key, productGroupId)
+            .put(MavenProperty.ARTIFACT_ID.key, productId.concat(DEMO_APP_POSTFIX))
+            .put(MavenProperty.TYPE.key, MavenProperty.TYPE.defaultValue);
 
     mavenArtifacts.add(appArtifactNode);
     writeJSONToFile(metaJsonFile, rootNode);
     // Create product-demo-app project
-    createAssemblyAppProject(productSource, productId + DEMO_POSTFIX,
-        mavenModels.pom(), mavenModels.pomModules().stream().toList());
-    return MavenUtils.resolveNewModuleName(mavenModels.pom(), DEMO_APP_POSTFIX, productId.concat(DEMO_APP_POSTFIX));
+    List<Model> demoMavenModels = mavenModels.getPomModules().stream().toList();
+    createAssemblyAppProject(productSource, productId + DEMO_POSTFIX, mavenModels.getPom(), demoMavenModels);
+    return MavenUtils.resolveNewModuleName(mavenModels.getPom(), DEMO_APP_POSTFIX, productId.concat(DEMO_APP_POSTFIX));
   }
 
   private String createNewAppArtifact(File metaJsonFile, ArrayNode mavenArtifacts, ObjectNode rootNode, MavenModel mavenModels)
       throws Exception {
     String productSource = extractProductSource(rootNode);
-    String productGroupId = Objects.requireNonNull(mavenModels).pom().getGroupId();
+    String productGroupId = Objects.requireNonNull(mavenModels).getPom().getGroupId();
     String productId = rootNode.get(MavenProperty.ID.key).asText();
     String productName = rootNode.get(MavenProperty.NAME.key).asText();
 
-    ObjectNode appArtifactNode = objectMapper.createObjectNode().
-        put(MavenProperty.KEY.key, productId).put(MavenProperty.NAME.key, APP_NAME_PATTERN.formatted(productName))
-        .put(MavenProperty.GROUP_ID.key, productGroupId)
-        .put(MavenProperty.ARTIFACT_ID.key, productId.concat(APP_POSTFIX))
-        .put(MavenProperty.TYPE.key, MavenProperty.TYPE.defaultValue);
+    ObjectNode appArtifactNode = objectMapper.createObjectNode()
+            .put(MavenProperty.KEY.key, productId).put(MavenProperty.NAME.key, APP_NAME_PATTERN.formatted(productName))
+            .put(MavenProperty.GROUP_ID.key, productGroupId)
+            .put(MavenProperty.ARTIFACT_ID.key, productId.concat(APP_POSTFIX))
+            .put(MavenProperty.TYPE.key, MavenProperty.TYPE.defaultValue);
 
     mavenArtifacts.add(appArtifactNode);
     writeJSONToFile(metaJsonFile, rootNode);
     // Create product-app project
-    createAssemblyAppProject(productSource, productId, mavenModels.pom(),
-        mavenModels.pomModules().stream().filter(model -> !StringUtils.endsWith(model.getArtifactId(), DEMO_POSTFIX)).toList());
-    return MavenUtils.resolveNewModuleName(mavenModels.pom(), APP_POSTFIX, productId.concat(APP_POSTFIX));
+    List<Model> appMavenModels = mavenModels.getPomModules().stream()
+        .filter(model -> !StringUtils.endsWith(model.getArtifactId(), DEMO_POSTFIX)).toList();
+    createAssemblyAppProject(productSource, productId, mavenModels.getPom(), appMavenModels);
+    return MavenUtils.resolveNewModuleName(mavenModels.getPom(), APP_POSTFIX, productId.concat(APP_POSTFIX));
   }
 
   private void createAssemblyAppProject(String ghRepoURL, String productId, Model parentPom, List<Model> mavenModels) throws Exception {
@@ -258,12 +285,27 @@ public class MarketMetaJsonScanner {
 
     // Create the project folder
     String projectPath = productId + APP_POSTFIX + SLASH;
-    AppProject appProject = MavenUtils.createAssemblyAppProject(productId, parentPom, mavenModels);
-    returnedStatus = GitHubUtils.commitFileChanges(repository, BRANCH_NAME, projectPath + POM, COMMIT_NEW_FILE_MESSAGE.formatted(POM), appProject.pom(), false);
+    AppModel appModel = MavenUtils.createAssemblyAppProject(productId, parentPom, mavenModels);
+    var commitModel = new CommitModel();
+    commitModel.setRepository(repository);
+    commitModel.setBranch(BRANCH_NAME);
+    commitModel.setPath(projectPath + POM);
+    commitModel.setMessage(COMMIT_NEW_FILE_MESSAGE.formatted(POM));
+    commitModel.setContent(appModel.getPom());
+    commitModel.setForce(false);
+    returnedStatus = GitHubUtils.commitFileChanges(commitModel);
     status = returnedStatus != 0 ? returnedStatus : status;
-    returnedStatus = GitHubUtils.commitFileChanges(repository, BRANCH_NAME, projectPath + ASSEMBLY, COMMIT_NEW_FILE_MESSAGE.formatted(ASSEMBLY), appProject.assembly(), false);
+
+    commitModel.setPath(projectPath + ASSEMBLY);
+    commitModel.setMessage(COMMIT_NEW_FILE_MESSAGE.formatted(ASSEMBLY));
+    commitModel.setContent(appModel.getAssembly());
+    returnedStatus = GitHubUtils.commitFileChanges(commitModel);
     status = returnedStatus != 0 ? returnedStatus : status;
-    returnedStatus = GitHubUtils.commitFileChanges(repository, BRANCH_NAME, projectPath + DEPLOY_OPTIONS, COMMIT_NEW_FILE_MESSAGE.formatted(DEPLOY_OPTIONS), appProject.deployOptions(), false);
+
+    commitModel.setPath(projectPath + DEPLOY_OPTIONS);
+    commitModel.setMessage(COMMIT_NEW_FILE_MESSAGE.formatted(DEPLOY_OPTIONS));
+    commitModel.setContent(appModel.getDeployOptions());
+    returnedStatus = GitHubUtils.commitFileChanges(commitModel);
     status = returnedStatus != 0 ? returnedStatus : status;
     if (status == 0) {
       LOG.info("Project created successfully inside the {0} repository!", ghRepoURL);

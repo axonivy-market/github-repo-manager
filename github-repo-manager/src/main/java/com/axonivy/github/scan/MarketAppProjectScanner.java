@@ -9,24 +9,24 @@ import com.axonivy.github.scan.util.ScanUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.SystemUtils;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.kohsuke.github.GHRepository;
-import org.w3c.dom.Document;
-import org.w3c.dom.NodeList;
-import org.xml.sax.InputSource;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.axonivy.github.constant.Constants.*;
@@ -35,11 +35,7 @@ import static org.apache.commons.lang3.StringUtils.EMPTY;
 public class MarketAppProjectScanner {
   private static final Logger LOG = new Logger();
   private static final String MAJOR_VERSION_REGEX = "\\.";
-  private static final String MVN = "mvn ";
-  private static final String MVN_WIN = "mvn.cmd ";
-  private static final String MVN_CMD_PATTERN = "-f %s/pom.xml -Dmaven.test.skip=true -DaltDeploymentRepository=github::default::https://maven.pkg.github.com/%s";
   private static final String MAVEN_META_STATUS_PATTERN = "https://maven.axonivy.com/%s/maven-metadata.xml";
-  private static final String DEPLOY_CMD = "--batch-mode deploy ";
   private static final String DEFAULT_BRANCH = "master";
   private final String ghActor;
   private final GHRepository repository;
@@ -100,9 +96,10 @@ public class MarketAppProjectScanner {
    * Read the maven metadata-status of product artifact.
    * Then check the available app project based on major version from product artifact.
    * If missing, crease a new release for highest major version.
-   * @param pom the pom file where the product artifact module was defined
+   *
+   * @param pom                   the pom file where the product artifact module was defined
    * @param productArtifactModule product module name of the product
-   * @param localRepoDir working directory of the repo
+   * @param localRepoDir          working directory of the repo
    */
   private void checkAndReleaseNewAppArtifactsForTargetPOM(Model pom, String productArtifactModule, File localRepoDir)
       throws IOException, InterruptedException {
@@ -195,20 +192,22 @@ public class MarketAppProjectScanner {
 
   private Model readModulePom(String path) throws IOException {
     var pomFile = new File(path + SLASH + POM);
+    Model model = null;
     try (var input = new FileInputStream(pomFile)) {
-      return new MavenXpp3Reader().read(input);
+      model = new MavenXpp3Reader().read(input);
     } catch (XmlPullParserException e) {
       LOG.error("Cannot read POM at {0} by {1}", path, e.getMessage());
     }
-    return null;
+    return model;
   }
 
   /**
    * Check and clean the existing repo directory.
    * Then cloning the code from target repo.
+   *
    * @return cloned repo directory
    * @throws GitAPIException When got a JGit issue
-   * @throws IOException When got a File IO issue
+   * @throws IOException     When got a File IO issue
    */
   private File cloneNewRepository() throws GitAPIException, IOException {
     File localRepoDir = new File(WORK_DIR + SLASH + repository.getName());
