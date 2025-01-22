@@ -78,7 +78,7 @@ public class MarketMetaJsonScanner {
     objectMapper.writer(printer).writeValue(metaJsonFile, rootNode);
   }
 
-  public int process() throws Exception {
+  public boolean process() throws Exception {
     anyChanges = false;
     for (GHContent content : gitHub.getRepository(marketRepo).getDirectoryContent(ROOT_FOLDER)) {
       if (isIgnoreRepo(content)) {
@@ -87,7 +87,7 @@ public class MarketMetaJsonScanner {
       }
       findMetaPath(content);
     }
-    return anyChanges ? 1 : 0;
+    return anyChanges;
   }
 
   private void findMetaPath(GHContent ghContent) throws Exception {
@@ -177,13 +177,13 @@ public class MarketMetaJsonScanner {
     String rootProductId = rootNode.get(MavenProperty.ID.key).asText();
     if (isRequiredAppArtifact(mavenModels, artifactIds, rootProductId, mavenArtifacts)) {
       LOG.info("Need to create a new {0}-app.zip project!", rootProductId);
-      String appModule = createNewAppArtifact(metaJsonFile, mavenArtifacts, rootNode, mavenModels);
+      String appModule = createNewAppArtifact(metaJsonFile, mavenArtifacts, rootNode, mavenModels, false);
       mavenModels.getPom().getModules().add(appModule);
       modified = true;
     }
     if (isRequiredDemoAppArtifact(artifactIds, rootProductId, mavenArtifacts)) {
       LOG.info("Need to create a new {0}-demo-app.zip project!", rootProductId);
-      String demoAppModule = createNewDemoAppArtifact(metaJsonFile, mavenArtifacts, rootNode, mavenModels);
+      String demoAppModule = createNewAppArtifact(metaJsonFile, mavenArtifacts, rootNode, mavenModels, true);
       mavenModels.getPom().getModules().add(demoAppModule);
       modified = true;
     }
@@ -229,50 +229,38 @@ public class MarketMetaJsonScanner {
     return productSource;
   }
 
-  private String createNewDemoAppArtifact(File metaJsonFile, ArrayNode mavenArtifacts, ObjectNode rootNode, MavenModel mavenModels)
+  private String createNewAppArtifact(File metaJsonFile, ArrayNode mavenArtifacts, ObjectNode rootNode, MavenModel mavenModels, boolean isDemoApp)
       throws Exception {
-    String productSource = extractProductSource(rootNode);
-    String productGroupId = Objects.requireNonNull(mavenModels).getPom().getGroupId();
-    String productId = rootNode.get(MavenProperty.ID.key).asText();
+    String artifactKey = rootNode.get(MavenProperty.ID.key).asText();
     String productName = rootNode.get(MavenProperty.NAME.key).asText();
+    String artifactName = APP_NAME_PATTERN.formatted(productName);
+    String artifactId = artifactKey.concat(APP_POSTFIX);
+    List<Model> appMavenModels = null;
+    if (isDemoApp) {
+      artifactName = DEMO_APP_NAME_PATTERN.formatted(productName);
+      artifactId = artifactKey.concat(DEMO_APP_POSTFIX);
+      appMavenModels = mavenModels.getPomModules().stream().toList();
+    } else {
+      appMavenModels = mavenModels.getPomModules().stream()
+          .filter(model -> !StringUtils.endsWith(model.getArtifactId(), DEMO_POSTFIX)).toList();
+    }
     ObjectNode appArtifactNode = objectMapper.createObjectNode()
-            .put(MavenProperty.KEY.key, productId)
-            .put(MavenProperty.NAME.key, DEMO_APP_NAME_PATTERN.formatted(productName))
-            .put(MavenProperty.GROUP_ID.key, productGroupId)
-            .put(MavenProperty.ARTIFACT_ID.key, productId.concat(DEMO_APP_POSTFIX))
-            .put(MavenProperty.TYPE.key, MavenProperty.TYPE.defaultValue);
+        .put(MavenProperty.KEY.key, artifactKey)
+        .put(MavenProperty.NAME.key, artifactName)
+        .put(MavenProperty.GROUP_ID.key, Objects.requireNonNull(mavenModels).getPom().getGroupId())
+        .put(MavenProperty.ARTIFACT_ID.key, artifactId)
+        .put(MavenProperty.TYPE.key, MavenProperty.TYPE.defaultValue);
 
     mavenArtifacts.add(appArtifactNode);
     writeJSONToFile(metaJsonFile, rootNode);
+
     // Create product-demo-app project
-    List<Model> demoMavenModels = mavenModels.getPomModules().stream().toList();
-    createAssemblyAppProject(productSource, productId + DEMO_POSTFIX, mavenModels.getPom(), demoMavenModels);
-    return MavenUtils.resolveNewModuleName(mavenModels.getPom(), DEMO_APP_POSTFIX, productId.concat(DEMO_APP_POSTFIX));
+    createAssemblyAppProject(extractProductSource(rootNode), artifactId, mavenModels.getPom(), appMavenModels);
+    return MavenUtils.resolveNewModuleName(mavenModels.getPom(), DEMO_APP_POSTFIX, artifactId);
   }
 
-  private String createNewAppArtifact(File metaJsonFile, ArrayNode mavenArtifacts, ObjectNode rootNode, MavenModel mavenModels)
+  private void createAssemblyAppProject(String ghRepoURL, String productId, Model parentPom, List<Model> mavenModels)
       throws Exception {
-    String productSource = extractProductSource(rootNode);
-    String productGroupId = Objects.requireNonNull(mavenModels).getPom().getGroupId();
-    String productId = rootNode.get(MavenProperty.ID.key).asText();
-    String productName = rootNode.get(MavenProperty.NAME.key).asText();
-
-    ObjectNode appArtifactNode = objectMapper.createObjectNode()
-            .put(MavenProperty.KEY.key, productId).put(MavenProperty.NAME.key, APP_NAME_PATTERN.formatted(productName))
-            .put(MavenProperty.GROUP_ID.key, productGroupId)
-            .put(MavenProperty.ARTIFACT_ID.key, productId.concat(APP_POSTFIX))
-            .put(MavenProperty.TYPE.key, MavenProperty.TYPE.defaultValue);
-
-    mavenArtifacts.add(appArtifactNode);
-    writeJSONToFile(metaJsonFile, rootNode);
-    // Create product-app project
-    List<Model> appMavenModels = mavenModels.getPomModules().stream()
-        .filter(model -> !StringUtils.endsWith(model.getArtifactId(), DEMO_POSTFIX)).toList();
-    createAssemblyAppProject(productSource, productId, mavenModels.getPom(), appMavenModels);
-    return MavenUtils.resolveNewModuleName(mavenModels.getPom(), APP_POSTFIX, productId.concat(APP_POSTFIX));
-  }
-
-  private void createAssemblyAppProject(String ghRepoURL, String productId, Model parentPom, List<Model> mavenModels) throws Exception {
     Objects.requireNonNull(ghRepoURL);
     int status = 0;
     if (StringUtils.startsWith(ghRepoURL, GITHUB_URL)) {
@@ -284,7 +272,7 @@ public class MarketMetaJsonScanner {
     status = returnedStatus != 0 ? returnedStatus : status;
 
     // Create the project folder
-    String projectPath = productId + APP_POSTFIX + SLASH;
+    String projectPath = productId + SLASH;
     AppModel appModel = MavenUtils.createAssemblyAppProject(productId, parentPom, mavenModels);
     var commitModel = new CommitModel();
     commitModel.setRepository(repository);

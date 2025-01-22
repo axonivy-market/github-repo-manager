@@ -19,12 +19,13 @@ public class ScanMetaJsonFiles {
     }
     LOG.info("Start Scanning Meta JSON files for {0} repo", proceedRepo);
     var marketMetaJsonScanner = new MarketMetaJsonScanner(GitHubUtils.extractActor(args), proceedRepo, getIgnoreRepos());
-    int status = marketMetaJsonScanner.process();
-    if (status != 0) {
-      LOG.error("At least one issue is found during scanning");
+    boolean anyChanges = marketMetaJsonScanner.process();
+    if (anyChanges) {
+      LOG.error("At least one repo is out of date or an issue appears during scanning");
+      System.exit(1);
     }
     LOG.info("Scanning Meta JSON files finished");
-    System.exit(status);
+    System.exit(0);
   }
 }
 
