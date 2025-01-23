@@ -119,6 +119,7 @@ public class MarketAppProjectScanner {
     }
 
     for (var app : collectAppArtifactModules(pom)) {
+      app = MavenUtils.resolveMavenVariable(pom, app);
       String appMetaResponse = openStreamFromPath(String.format(MAVEN_META_STATUS_PATTERN, mavenURLs.concat(app)));
       if (StringUtils.isBlank(appMetaResponse)) {
         LOG.info("No {0} artifact available on Maven repo", app);
