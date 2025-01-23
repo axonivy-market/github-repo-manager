@@ -85,7 +85,7 @@ public class MavenUtils {
         readResourceFile(Constants.DEPLOY_OPTIONS));
   }
 
-  private static String resolveMavenVariable(Model pomModel, String property) {
+  public static String resolveMavenVariable(Model pomModel, String property) {
     Properties properties = new Properties(pomModel.getProperties());
     properties.put(combineProperty(PROJECT, NAME), ObjectUtils.defaultIfNull(pomModel.getName(), EMPTY));
     properties.put(combineProperty(PROJECT, VERSION), ObjectUtils.defaultIfNull(pomModel.getVersion(), EMPTY));
@@ -124,6 +124,10 @@ public class MavenUtils {
     model.setArtifactId(repoName + Constants.APP_POSTFIX);
     model.setVersion(parentModel.getVersion());
     model.setScm(parentModel.getScm());
+    String resolvedDeveloperConnection = resolveMavenVariable(parentModel, parentModel.getScm().getDeveloperConnection());
+    if (!StringUtils.equals(model.getScm().getDeveloperConnection(), resolvedDeveloperConnection)) {
+      model.getScm().setDeveloperConnection(resolvedDeveloperConnection);
+    }
 
     for (var mavenModel : mavenModels) {
       Dependency dependency = new Dependency();

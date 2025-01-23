@@ -103,6 +103,7 @@ public class MarketAppProjectScanner {
    */
   private void checkAndReleaseNewAppArtifactsForTargetPOM(Model pom, String productArtifactModule, File localRepoDir)
       throws IOException, InterruptedException {
+    productArtifactModule = MavenUtils.resolveMavenVariable(pom, productArtifactModule);
     var mavenURLs = StringUtils.replace(pom.getGroupId(), DOT, SLASH).concat(SLASH);
     String productXMLResponse = openStreamFromPath(MavenUtils.getMetadataStatusURL(mavenURLs.concat(productArtifactModule)));
     List<String> mavenVersions = MavenUtils.getMavenVersionsFromXML(productXMLResponse);
