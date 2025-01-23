@@ -239,9 +239,6 @@ public class MarketMetaJsonScanner {
     String artifactId = artifactKey.concat(APP_POSTFIX);
     List<Model> appMavenModels = null;
     if (isDemoApp) {
-      if (productName.endsWith(DEMO)) {
-        productName = StringUtils.removeEnd(productName, DEMO);
-      }
       artifactName = productName.endsWith(DEMO) ?
           DEMO_APP_NAME_PATTERN.formatted(StringUtils.removeEnd(productName, DEMO)) : DEMO_APP_NAME_PATTERN.formatted(productName);
       artifactName = StringUtils.replace(artifactName, "  ", StringUtils.SPACE);
