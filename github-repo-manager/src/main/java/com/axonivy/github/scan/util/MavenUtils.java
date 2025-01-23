@@ -119,7 +119,7 @@ public class MavenUtils {
       Objects.requireNonNull(inputStream, "Sample POM file not found in resources.");
       model = new MavenXpp3Reader().read(inputStream);
     }
-
+    model.setName(parentModel.getName());
     model.setGroupId(parentModel.getGroupId());
     model.setArtifactId(repoName + Constants.APP_POSTFIX);
     model.setVersion(parentModel.getVersion());
