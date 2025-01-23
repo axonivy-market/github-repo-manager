@@ -121,7 +121,7 @@ public class MavenUtils {
     }
     model.setName(parentModel.getName());
     model.setGroupId(parentModel.getGroupId());
-    model.setArtifactId(repoName + Constants.APP_POSTFIX);
+    model.setArtifactId(repoName);
     model.setVersion(parentModel.getVersion());
     model.setScm(parentModel.getScm());
     String resolvedDeveloperConnection = resolveMavenVariable(parentModel, parentModel.getScm().getDeveloperConnection());
