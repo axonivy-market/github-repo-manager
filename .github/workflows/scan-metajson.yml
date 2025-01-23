@@ -1,0 +1,48 @@
+name: Scan Meta JSON
+
+on:
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: 'Indicates whether to trigger changes to a product. By default, `dryRun` is set to `true`, meaning the action will perform a check without applying changes. When set to `false`, the action will both check for and add any missing modules to the products.'
+        default: 'true'
+      repository:
+        description: 'Define repository to check the missing app projects, example: axonivy-market/market'
+        default: 'axonivy-market/market'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure Git
+        run: |
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git config user.name "${{ github.actor }}"
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: temurin
+          cache: maven
+
+      - name: Unify default values
+        run: |
+          echo "DRYRUN=${{ github.event.inputs.dryRun || 'true' }}" >> $GITHUB_ENV
+
+      - name: Start ScanMetaJsonFiles main
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        working-directory: ./github-repo-manager
+        run: |
+          mvn -B clean compile exec:java \
+            -DDRY_RUN="${{ env.DRYRUN }}" \
+            -DGITHUB.TOKEN="${{ secrets.TOKEN }}" \
+            -Dexec.mainClass="com.axonivy.github.scan.ScanMetaJsonFiles" \
+            -Dexec.args="${{ github.actor }}" \
+            -DGITHUB.MARKET.REPO="${{ github.event.inputs.repository }}" \
+            -DGITHUB.MARKET.IGNORE.REPOS="${{ vars.IGNORE_REPOS }}"

@@ -5,6 +5,7 @@ import java.io.Reader;
 import java.util.List;
 import java.util.Objects;
 
+import com.axonivy.github.Logger;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.input.CharSequenceReader;
 import org.kohsuke.github.GHContent;
@@ -15,6 +16,7 @@ import org.kohsuke.github.GitHub;
 import com.axonivy.github.DryRun;
 import com.axonivy.github.GitHubProvider;
 import com.axonivy.github.file.GitHubFiles.FileMeta;
+import static com.axonivy.github.constant.Constants.GIT_HEAD;
 
 public class GitHubFilesRemover {
 
@@ -104,7 +106,7 @@ public class GitHubFilesRemover {
   private void removeFileOnGit(GHRepository repo, GHContent foundFile) throws IOException {
     var defaultBranch = repo.getBranch(repo.getDefaultBranch());
     var sha1 = defaultBranch.getSHA1();
-    repo.createRef("refs/heads/" + reference.meta().branchName(), sha1);
+    repo.createRef(GIT_HEAD + reference.meta().branchName(), sha1);
     foundFile.delete(reference.meta().commitMessage(), reference.meta().branchName());
     var pr = repo.createPullRequest(reference.meta().pullRequestTitle(), reference.meta().branchName(), repo.getDefaultBranch(), "");
     if (ghActor != null) {

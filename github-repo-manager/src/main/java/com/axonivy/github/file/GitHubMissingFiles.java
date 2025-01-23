@@ -1,10 +1,10 @@
 package com.axonivy.github.file;
 
+import com.axonivy.github.file.GitHubFiles.*;
+
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
-
-import com.axonivy.github.file.GitHubFiles.FileMeta;
 
 import static com.axonivy.github.file.GitHubFiles.*;
 
@@ -17,7 +17,7 @@ public class GitHubMissingFiles {
     String user = "";
     if (args.length > 0) {
       user = args[0];
-      System.out.println("running updates triggered by user "+user);
+      System.out.println("running updates triggered by user " + user);
     }
     int status = 0;
     List<String> workingOrganizations = getWorkingOrganizations();
