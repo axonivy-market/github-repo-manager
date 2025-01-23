@@ -38,8 +38,10 @@ import static com.axonivy.github.scan.ScanMetaJsonFiles.GITHUB_URL;
 
 public class MarketMetaJsonScanner {
   private static final Logger LOG = new Logger();
-  private static final String APP_NAME_PATTERN = "%s App";
-  private static final String DEMO_APP_NAME_PATTERN = "%s Demo App";
+  private static final String APP= "App";
+  private static final String APP_NAME_PATTERN = "%s " + APP;
+  private static final String DEMO = "Demo";
+  private static final String DEMO_APP_NAME_PATTERN = "%s " + DEMO + StringUtils.SPACE + APP;
   private static final String ROOT_FOLDER = "market";
   private static final String META_JSON = "meta.json";
   private static final String BRANCH_NAME = "MARP-1872-Export-MarketPlace-Components-from-Designer-with-Dependencies";
@@ -237,8 +239,13 @@ public class MarketMetaJsonScanner {
     String artifactId = artifactKey.concat(APP_POSTFIX);
     List<Model> appMavenModels = null;
     if (isDemoApp) {
-      artifactName = DEMO_APP_NAME_PATTERN.formatted(productName);
-      artifactId = artifactKey.concat(DEMO_APP_POSTFIX);
+      if (productName.endsWith(DEMO)) {
+        productName = StringUtils.removeEnd(productName, DEMO);
+      }
+      artifactName = productName.endsWith(DEMO) ?
+          DEMO_APP_NAME_PATTERN.formatted(StringUtils.removeEnd(productName, DEMO)) : DEMO_APP_NAME_PATTERN.formatted(productName);
+      artifactId = artifactKey.endsWith(DEMO_POSTFIX) ?
+          StringUtils.removeEnd(artifactKey, DEMO_POSTFIX).concat(DEMO_APP_POSTFIX) : artifactKey.concat(DEMO_APP_POSTFIX);
       appMavenModels = mavenModels.getPomModules().stream().toList();
     } else {
       appMavenModels = mavenModels.getPomModules().stream()
