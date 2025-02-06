@@ -10,6 +10,7 @@ import org.kohsuke.github.*;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import static com.axonivy.github.constant.Constants.GIT_HEAD;
@@ -29,6 +30,7 @@ public class GitHubMissingFilesDetector {
     this.reference = new FileReference(fileMeta);
     this.github = GitHubProvider.getGithubByToken();
     this.ghActor = github.getUser(user);
+    this.organizations = new ArrayList<>();
   }
 
   public int requireFile(List<String> orgNames) throws IOException {
