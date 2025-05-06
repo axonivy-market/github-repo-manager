@@ -72,5 +72,6 @@
   { "product": "axonivy-market/asana-connector", "owner": "@axonivy-market/team-octopus" },
   { "product": "axonivy-market/stripe-connector", "owner": "@axonivy-market/team-octopus" },
   { "product": "axonivy-market/keycloak-connector", "owner": "@axonivy-market/team-octopus" },
-  { "product": "axonivy-market/pattern-demos", "owner": "@axonivy-market/team-octopus" }
+  { "product": "axonivy-market/pattern-demos", "owner": "@axonivy-market/team-octopus" },
+  { "product": "axonivy-market/coffee-machine-connector", "owner": "@axonivy-market/team-octopus" }
 ]
