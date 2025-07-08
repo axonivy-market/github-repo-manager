@@ -73,5 +73,8 @@
   { "product": "axonivy-market/stripe-connector", "owner": "@axonivy-market/team-octopus" },
   { "product": "axonivy-market/keycloak-connector", "owner": "@axonivy-market/team-octopus" },
   { "product": "axonivy-market/pattern-demos", "owner": "@axonivy-market/team-octopus" },
-  { "product": "axonivy-market/coffee-machine-connector", "owner": "@axonivy-market/team-octopus" }
+  { "product": "axonivy-market/coffee-machine-connector", "owner": "@axonivy-market/team-octopus" },
+  { "product": "axonivy-market/azure-servicebus-connector", "owner": "@axonivy-market/team-octopus" },
+  { "product": "axonivy-market/ibm-db2-luw", "owner": "@axonivy-market/team-octopus" },
+  { "product": "axonivy-market/process-miner-viewer", "owner": "@axonivy-market/team-octopus" }
 ]
