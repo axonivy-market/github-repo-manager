@@ -44,10 +44,8 @@ public class CodeOwnerFilesDetector extends GitHubMissingFilesDetector {
   }
 
   private List<CodeOwner> getAllCodeOwners() throws IOException {
-    if (ObjectUtils.isEmpty(codeOwners)) {
-      try (var is = CodeOwnerFilesDetector.class.getResourceAsStream(CODE_OWNER_FILE_NAME)) {
-        codeOwners = objectMapper.readValue(is, CODE_OWNER_TYPE_REFERENCE);
-      }
+    try (var is = CodeOwnerFilesDetector.class.getResourceAsStream(CODE_OWNER_FILE_NAME)) {
+      codeOwners = objectMapper.readValue(is, CODE_OWNER_TYPE_REFERENCE);
     }
     return codeOwners;
   }
