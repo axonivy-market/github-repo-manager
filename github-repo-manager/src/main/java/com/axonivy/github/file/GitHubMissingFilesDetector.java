@@ -51,11 +51,8 @@ public class GitHubMissingFilesDetector {
     if (GITHUB_ORG.equals(repo.getName())) {
       return;
     }
-    if (repo.isFork()) {
-      return;
-    }
-    if (repo.isPrivate() || repo.isArchived()) {
-      LOG.info("Repo {0} is {1}.", repo.getFullName(), repo.isPrivate() ? "private" : "archived");
+    if (repo.isPrivate()) {
+      LOG.info("Repo {0} is private.", repo.getFullName());
       return;
     }
 
