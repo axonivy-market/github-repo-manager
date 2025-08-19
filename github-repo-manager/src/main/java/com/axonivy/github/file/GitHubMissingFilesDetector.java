@@ -194,10 +194,27 @@ public class GitHubMissingFilesDetector {
     }
     var headBranch = repo.getBranch(repo.getDefaultBranch());
     String refURL = createBranchIfMissing(repo, BRANCH_PREFIX + reference.meta().branchName(), headBranch.getSHA1());
-    repo.getFileContent(reference.meta().filePath(), refURL)
-        .update(loadReferenceFileContent(repo.getUrl().toString()),
-            reference.meta().commitMessage(),
-            refURL);
+
+    var existingFile = repo.getFileContent(reference.meta().filePath(), refURL);
+
+    byte[] mergedContent;
+    try (var inputStream = existingFile.read()) {
+      var existingContent = new String(inputStream.readAllBytes());
+      var newContent = new String(fileContent);
+
+      if (existingContent.contains(newContent.trim())) {
+        return;
+      }
+
+      String merged = existingContent.trim();
+      if (!merged.isEmpty() && !merged.endsWith("\n")) {
+        merged += "\n";
+      }
+      merged += newContent;
+      mergedContent = merged.getBytes();
+    }
+
+    existingFile.update(mergedContent, reference.meta().commitMessage(), refURL);
     createNewPullRequest(repo, refURL);
   }
 
