@@ -27,7 +27,11 @@ public class CodeOwnerFilesDetector extends GitHubMissingFilesDetector {
 
     for (var codeOwner : getAllCodeOwners()) {
       if (StringUtils.contains(repoURL, codeOwner.product)) {
-        return String.format(CODE_OWNER_FORMAT, codeOwner.owner).getBytes();
+        StringBuilder ownerContent = new StringBuilder();
+        for (String owner : codeOwner.owner) {
+          ownerContent.append(String.format(CODE_OWNER_FORMAT, owner)).append("\n");
+        }
+        return ownerContent.toString().getBytes();
       }
     }
     return null;
@@ -40,6 +44,6 @@ public class CodeOwnerFilesDetector extends GitHubMissingFilesDetector {
     return codeOwners;
   }
 
-  record CodeOwner(String product, String owner) {
+  record CodeOwner(String product, List<String> owner) {
   }
 }
