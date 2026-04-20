@@ -2,9 +2,7 @@ package com.axonivy.github.file;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.kohsuke.github.GHContent;
 
 import java.io.IOException;
 import java.util.List;
@@ -22,14 +20,6 @@ public class CodeOwnerFilesDetector extends GitHubMissingFilesDetector {
   }
 
   @Override
-  protected boolean hasSimilarContent(GHContent existingFile) throws IOException {
-    // The code owners has a lot of rulesets, and we should not override the existing config
-    try (var inputStream = existingFile.read()) {
-      return StringUtils.isNoneBlank(new String(inputStream.readAllBytes()));
-    }
-  }
-
-  @Override
   protected byte[] loadReferenceFileContent(String repoURL) throws IOException {
     if (StringUtils.isBlank(repoURL)) {
       return super.loadReferenceFileContent(repoURL);
@@ -37,21 +27,23 @@ public class CodeOwnerFilesDetector extends GitHubMissingFilesDetector {
 
     for (var codeOwner : getAllCodeOwners()) {
       if (StringUtils.contains(repoURL, codeOwner.product)) {
-        return String.format(CODE_OWNER_FORMAT, codeOwner.owner).getBytes();
+        StringBuilder ownerContent = new StringBuilder();
+        for (String owner : codeOwner.owner) {
+          ownerContent.append(String.format(CODE_OWNER_FORMAT, owner)).append("\n");
+        }
+        return ownerContent.toString().getBytes();
       }
     }
     return null;
   }
 
   private List<CodeOwner> getAllCodeOwners() throws IOException {
-    if (ObjectUtils.isEmpty(codeOwners)) {
-      try (var is = CodeOwnerFilesDetector.class.getResourceAsStream(CODE_OWNER_FILE_NAME)) {
-        codeOwners = objectMapper.readValue(is, CODE_OWNER_TYPE_REFERENCE);
-      }
+    try (var is = CodeOwnerFilesDetector.class.getResourceAsStream(CODE_OWNER_FILE_NAME)) {
+      codeOwners = objectMapper.readValue(is, CODE_OWNER_TYPE_REFERENCE);
     }
     return codeOwners;
   }
 
-  record CodeOwner(String product, String owner) {
+  record CodeOwner(String product, List<String> owner) {
   }
 }

@@ -197,10 +197,10 @@ public class GitHubMissingFilesDetector {
     }
     var headBranch = repo.getBranch(repo.getDefaultBranch());
     String refURL = createBranchIfMissing(repo, BRANCH_PREFIX + reference.meta().branchName(), headBranch.getSHA1());
-    repo.getFileContent(reference.meta().filePath(), refURL)
-        .update(loadReferenceFileContent(repo.getUrl().toString()),
-            reference.meta().commitMessage(),
-            refURL);
+
+    var existingFile = repo.getFileContent(reference.meta().filePath(), refURL);
+
+    existingFile.update(fileContent, reference.meta().commitMessage(), refURL);
     createNewPullRequest(repo, refURL);
   }
 
